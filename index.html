@@ -15,6 +15,9 @@
   <!-- Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 
+  <!-- Supabase JS Client (Cloud PostgreSQL & Realtime Broadcast) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
 
@@ -2406,19 +2409,77 @@
     }
 
     // =========================================================================
+    // SUPABASE CLOUD POSTGRESQL & REALTIME BROADCAST ENGINE
+    // =========================================================================
+    const SUPABASE_URL = "https://ymybzocpfyvlospjwbwr.supabase.co";
+    const SUPABASE_KEY = "sb_publishable__HpZ-ejoALrwMsNUbv6yyg_owVbYmsT";
+    let supabaseClient = null;
+    let supabaseRealtimeChannel = null;
+
+    if (window.supabase) {
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Connect to global Realtime Broadcast Channel across all Vercel visitors
+        supabaseRealtimeChannel = supabaseClient.channel('prakriti-live-dispatch', {
+          config: { broadcast: { self: false } }
+        });
+
+        supabaseRealtimeChannel.on('broadcast', { event: 'STATE_SYNC' }, ({ payload }) => {
+          if (payload) {
+            let changed = false;
+            if (payload.reports && Array.isArray(payload.reports)) {
+              reports = payload.reports;
+              localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+              changed = true;
+            }
+            if (payload.citizens && Array.isArray(payload.citizens)) {
+              citizens = payload.citizens;
+              localStorage.setItem("greenpulse_citizens_clean_v8", JSON.stringify(citizens));
+              changed = true;
+            }
+            if (payload.officers && Array.isArray(payload.officers)) {
+              officers = payload.officers;
+              localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+              changed = true;
+            }
+            if (changed) renderUI();
+          }
+        }).subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log("⚡ Supabase Realtime connected!");
+          }
+        });
+      } catch(e) {
+        console.warn("Supabase init notice:", e);
+      }
+    }
+
+    // =========================================================================
     // MULTI-DEVICE CLOUD & SERVER LIVE SYNCHRONIZATION ENGINE
     // =========================================================================
     async function syncServerData(pushData = false) {
       try {
+        // 1. Broadcast to Supabase Realtime across all Vercel & mobile users
+        if (pushData && supabaseRealtimeChannel) {
+          try {
+            supabaseRealtimeChannel.send({
+              type: 'broadcast',
+              event: 'STATE_SYNC',
+              payload: { reports, citizens, officers, updatedAt: new Date().toISOString() }
+            });
+          } catch(e) {}
+        }
+
+        // 2. Sync to local/tunnel REST API if available
         if (pushData) {
           await fetch('/api/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reports, citizens, officers, updatedAt: new Date().toISOString() })
-          });
+          }).catch(() => {});
         } else {
-          const res = await fetch('/api/data');
-          if (res.ok) {
+          const res = await fetch('/api/data').catch(() => null);
+          if (res && res.ok) {
             const data = await res.json();
             let changed = false;
             if (data && data.reports && Array.isArray(data.reports)) {
