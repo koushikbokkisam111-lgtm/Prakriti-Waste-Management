@@ -1,0 +1,3105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prakriti — Nature-First Municipal Waste Dispatch &amp; Civic Action</title>
+  
+  <!-- Leaflet Map CSS & JS (Free, Zero API Key) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
+
+  <style>
+    /* Tactile button & micro-animations */
+    button, input[type="button"], input[type="submit"], .btn-interactive {
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+    }
+    button:active, .btn-interactive:active {
+      transform: scale(0.95) !important;
+    }
+    .hover-lift {
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+    }
+    .hover-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.15);
+    }
+    @keyframes popIn {
+      0% { transform: scale(0.92); opacity: 0; }
+      70% { transform: scale(1.02); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop-in {
+      animation: popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    /* Leaflet pin styling */
+    .pin {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 3px solid #ffffff;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-size: 14px;
+      position: relative;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .pin:hover { transform: scale(1.18) translateY(-4px); }
+    .pin.dry { background: #0284c7; }
+    .pin.wet { background: #16a34a; }
+    .pin.hazardous { background: #e11d48; }
+    .status-ring {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+    }
+    .status-ring.pending { background: #d97706; animation: pulse 2s infinite; }
+    .status-ring.accepted { background: #2d6a4f; animation: pulse 1.2s infinite; }
+    .status-ring.proof_submitted { background: #1b4332; animation: pulse 1.5s infinite; }
+    .status-ring.collected { background: #10b981; }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
+
+    .leaflet-popup-content-wrapper {
+      padding: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(6, 78, 59, 0.25);
+    }
+    .leaflet-popup-content { margin: 0 !important; width: 270px !important; }
+  </style>
+</head>
+<body class="bg-[#051b14] text-slate-800 font-sans min-h-screen flex flex-col">
+
+  <!-- ========================================================================= -->
+  <!-- 1. STANDALONE AUTHENTICATION & LOGIN / SIGNUP SCREEN (Z-INDEX 99999) -->
+  <!-- ========================================================================= -->
+  <div id="auth-screen" class="fixed inset-0 bg-[#04140e] z-[99999] flex items-center justify-center p-4 overflow-y-auto">
+    <div class="max-w-md w-full bg-[#09281d] border border-emerald-900/60 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5 text-white my-auto">
+      
+      <!-- Brand Header -->
+      <div class="text-center space-y-1.5">
+        <div class="w-14 h-14 bg-gradient-to-tr from-emerald-600 via-teal-500 to-green-400 rounded-2xl flex items-center justify-center mx-auto text-3xl font-black shadow-lg shadow-emerald-950/60 border border-emerald-400/30">
+          🌿
+        </div>
+        <h2 class="text-2xl font-black tracking-tight font-heading text-emerald-100">Prakriti</h2>
+        <p class="text-xs text-emerald-300/80 font-medium">Nature-First Civic Waste Dispatch • KYC Verified</p>
+      </div>
+
+      <!-- Mode Toggle: Sign In vs Sign Up with KYC -->
+      <div class="flex items-center justify-center space-x-2 bg-[#061d15] p-1 rounded-2xl border border-emerald-900/80 text-xs font-bold">
+        <button id="btn-auth-mode-login" class="flex-1 py-2 rounded-xl bg-emerald-700 text-white shadow transition">
+          Sign In
+        </button>
+        <button id="btn-auth-mode-signup" class="flex-1 py-2 rounded-xl text-emerald-300/70 hover:text-white transition">
+          Sign Up (KYC Verification)
+        </button>
+      </div>
+
+      <!-- Login Role Selector Tabs (Only in Sign In mode) -->
+      <div id="auth-role-tabs-container" class="grid grid-cols-3 gap-1 bg-[#061d15] p-1 rounded-2xl border border-emerald-900/80 text-xs font-bold text-center">
+        <button id="auth-tab-citizen" class="py-1.5 rounded-xl bg-emerald-700 text-white shadow transition">
+          👤 Citizen
+        </button>
+        <button id="auth-tab-officer" class="py-1.5 rounded-xl text-emerald-300/70 hover:text-white transition">
+          🛡️ Officer
+        </button>
+        <button id="auth-tab-admin" class="py-1.5 rounded-xl text-emerald-300/70 hover:text-white transition">
+          👑 Admin
+        </button>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- A. SIGN IN FORMS (CITIZEN / OFFICER / ADMIN) -->
+      <!-- ========================================== -->
+      <div id="auth-login-forms-container" class="space-y-4">
+        
+        <!-- 1. Citizen Login Form (Username + Passkey) -->
+        <form id="form-login-citizen" class="space-y-3.5 text-xs">
+          <div class="p-2.5 bg-slate-800/60 rounded-xl border border-slate-700/60 text-slate-300 flex items-center justify-between">
+            <div>
+              <p class="font-bold text-white text-xs">Citizen Volunteer Sign In</p>
+              <p class="text-[10px] text-slate-400">KYC Verified Accounts</p>
+            </div>
+            <span class="text-emerald-400 text-[10px] font-bold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-700">✔ KYC Active</span>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Username</label>
+            <input type="text" id="citizen-login-username" required placeholder="Enter your username (e.g. your_name)" class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-medium focus:ring-2 focus:ring-emerald-500 outline-none text-xs" />
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Passkey</label>
+            <input type="password" id="citizen-login-passkey" required placeholder="Enter your passkey" class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono focus:ring-2 focus:ring-emerald-500 outline-none text-xs" />
+          </div>
+
+          <!-- Alert Box for Ban / Error -->
+          <div id="citizen-login-error" class="p-3 bg-rose-950/80 border border-rose-600 rounded-xl text-rose-200 text-xs hidden space-y-1">
+            <p class="font-bold text-rose-300 flex items-center">
+              <i class="fas fa-ban mr-1.5 text-rose-400"></i> Account Suspended
+            </p>
+            <p id="citizen-login-error-msg" class="text-[11px] leading-snug"></p>
+          </div>
+
+          <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg transition text-xs flex items-center justify-center space-x-1.5">
+            <span>Sign In to Citizen Portal</span>
+            <span>→</span>
+          </button>
+        </form>
+
+        <!-- 2. Officer Sign In Form (Username / ID + Passkey) -->
+        <form id="form-login-officer" class="space-y-3.5 text-xs hidden">
+          <div class="p-2.5 bg-indigo-950/60 rounded-xl border border-indigo-800/60 text-indigo-200">
+            <p class="font-bold text-white text-xs">Sanitation Field Officer Sign In</p>
+            <p class="text-[10px] text-indigo-300">Requires Admin Approval &amp; Govt KYC Service Badge</p>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Officer Username or ID</label>
+            <input type="text" id="officer-login-id" required placeholder="Enter Officer ID or Username (e.g. VMC-OFF-101)" class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono font-bold focus:ring-2 focus:ring-indigo-500 outline-none text-xs uppercase" />
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Passkey</label>
+            <input type="password" id="officer-login-pin" required placeholder="Enter your passkey" class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono focus:ring-2 focus:ring-indigo-500 outline-none text-xs" />
+          </div>
+
+          <!-- Alert Box for Ban / Approval Status -->
+          <div id="officer-login-error" class="p-3 bg-rose-950/80 border border-rose-600 rounded-xl text-rose-200 text-xs hidden space-y-1">
+            <p class="font-bold text-rose-300 flex items-center">
+              <i class="fas fa-ban mr-1.5 text-rose-400"></i> Access Denied
+            </p>
+            <p id="officer-login-error-msg" class="text-[11px] leading-snug"></p>
+          </div>
+
+          <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg transition text-xs flex items-center justify-center space-x-1.5">
+            <i class="fas fa-sign-in-alt"></i>
+            <span>Sign In to Officer Duty Portal</span>
+          </button>
+        </form>
+
+        <!-- 3. Admin Login Form -->
+        <form id="form-login-admin" class="space-y-4 text-xs hidden">
+          <div class="p-3 bg-amber-950/40 rounded-xl border border-amber-800/60 text-amber-200">
+            <p class="font-bold text-amber-300 mb-0.5">Municipal Admin Command Center</p>
+            <p class="text-[10px] text-amber-200/80">Authorized municipal administrators only. Anti-fraud ban authority.</p>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Municipal Security Passkey</label>
+            <input type="password" id="admin-login-passkey" required placeholder="Enter Security Passkey" class="w-full p-3 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono tracking-widest text-center uppercase focus:ring-2 focus:ring-amber-500 outline-none text-sm font-bold" />
+          </div>
+
+          <p id="admin-login-error" class="text-rose-400 font-bold text-[11px] hidden text-center">
+            Authentication failed. Invalid security passkey.
+          </p>
+
+          <button type="submit" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-slate-950 font-black rounded-xl shadow-lg transition text-xs flex items-center justify-center space-x-2">
+            <i class="fas fa-unlock"></i>
+            <span>Access Admin Command Center</span>
+          </button>
+        </form>
+
+      </div>
+
+      <!-- ========================================== -->
+      <!-- B. SIGN UP FORMS (WITH KYC VERIFICATION) -->
+      <!-- ========================================== -->
+      <div id="auth-signup-forms-container" class="space-y-4 hidden">
+        
+        <!-- Signup Role Selector (Citizen vs Officer) -->
+        <div class="grid grid-cols-2 gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700 text-xs font-bold text-center">
+          <button id="signup-tab-citizen" class="py-1.5 rounded-lg bg-emerald-600 text-white transition">
+            👤 Citizen Registration
+          </button>
+          <button id="signup-tab-officer" class="py-1.5 rounded-lg text-slate-400 hover:text-white transition">
+            🛡️ Officer Registration
+          </button>
+        </div>
+
+        <!-- 1. Citizen Sign Up (with Aadhaar/Voter ID KYC) -->
+        <form id="form-signup-citizen" class="space-y-3 text-xs">
+          <div class="p-2.5 bg-emerald-950/60 rounded-xl border border-emerald-800/60 text-emerald-200 space-y-1">
+            <p class="font-bold text-white text-xs flex items-center">
+              <i class="fas fa-id-card text-emerald-400 mr-1.5"></i> Citizen KYC Verification
+            </p>
+            <p class="text-[10px] text-emerald-300">Mandatory KYC prevents fake waste report spam under SWM 2016 rules.</p>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Full Legal Name *</label>
+            <input type="text" id="su-citizen-name" required placeholder="e.g. Ramesh Chandra" class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Govt ID Type *</label>
+              <select id="su-citizen-idtype" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+                <option>Aadhaar Card (UIDAI)</option>
+                <option>Voter ID (EPIC)</option>
+                <option>Driving License</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">ID Number (KYC) *</label>
+              <input type="text" id="su-citizen-idno" required placeholder="XXXX-XXXX-4821" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Mobile Number *</label>
+              <input type="tel" id="su-citizen-phone" required placeholder="+91 98480..." class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Ward / Locality</label>
+              <input type="text" id="su-citizen-ward" placeholder="Ward 14 - Benz Circle" value="Ward 14 - Benz Circle" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Choose Username *</label>
+              <input type="text" id="su-citizen-username" required placeholder="ramesh_clean" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Create Passkey *</label>
+              <input type="password" id="su-citizen-passkey" required placeholder="••••••••" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs" />
+            </div>
+          </div>
+
+          <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition text-xs flex items-center justify-center space-x-1.5">
+            <i class="fas fa-check-circle"></i>
+            <span>Complete KYC &amp; Create Citizen Account</span>
+          </button>
+        </form>
+
+        <!-- 2. Officer Sign Up (with Employee Badge KYC) -->
+        <form id="form-signup-officer" class="space-y-3 text-xs hidden">
+          <div class="p-2.5 bg-indigo-950/60 rounded-xl border border-indigo-800/60 text-indigo-200 space-y-1">
+            <p class="font-bold text-white text-xs flex items-center">
+              <i class="fas fa-id-badge text-indigo-400 mr-1.5"></i> Municipal Officer Service KYC
+            </p>
+            <p class="text-[10px] text-indigo-300">Creates a registered Officer account. Requires Admin verification before login access is granted.</p>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Officer Full Legal Name *</label>
+            <input type="text" id="su-officer-name" required placeholder="Insp. Rajesh Kumar Naidu" class="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Desired Officer ID *</label>
+              <input type="text" id="su-officer-id" required placeholder="VMC-OFF-110" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono uppercase text-xs" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Service Badge No. *</label>
+              <input type="text" id="su-officer-badge" required placeholder="AP-VMC-SWM-882" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono uppercase text-xs" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Assigned Ward *</label>
+              <input type="text" id="su-officer-ward" required placeholder="Ward 22" value="Ward 22 - Governorpet" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Official Mobile *</label>
+              <input type="tel" id="su-officer-phone" required placeholder="+91 94401..." class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Choose Username *</label>
+              <input type="text" id="su-officer-username" required placeholder="rajesh_officer" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-300 mb-1">Create Passkey *</label>
+              <input type="password" id="su-officer-passkey" required placeholder="••••••••" class="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono text-xs" />
+            </div>
+          </div>
+
+          <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition text-xs flex items-center justify-center space-x-1.5">
+            <i class="fas fa-paper-plane"></i>
+            <span>Submit KYC &amp; Request Admin Authorization</span>
+          </button>
+        </form>
+
+      </div>
+
+      <!-- Problem Framing Footer Link -->
+      <div class="pt-2 text-center border-t border-slate-800">
+        <button type="button" id="btn-login-open-pitch" class="text-xs text-slate-400 hover:text-amber-400 underline font-medium">
+          💡 View Problem Framing: India's 22% Waste Leakage Gap
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 2. MAIN APPLICATION CONTAINER (HIDDEN UNTIL LOGIN SUCCESS) -->
+  <!-- ========================================================================= -->
+  <div id="main-app-container" class="flex-1 flex flex-col bg-[#f2f8f5] hidden">
+
+    <!-- Top Header Navigation (Prakriti Nature Theme) -->
+    <header class="bg-[#062319] text-white px-4 sm:px-6 py-3 shadow-lg flex items-center justify-between z-30 shrink-0 border-b border-emerald-900/60">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-gradient-to-tr from-emerald-600 to-green-400 rounded-2xl flex items-center justify-center font-black text-white text-xl shadow-lg shadow-emerald-950/60 border border-emerald-400/30">
+          🌿
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-base sm:text-lg font-black tracking-tight text-emerald-50">Prakriti</h1>
+            <span id="active-role-badge" class="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30 uppercase tracking-wider">
+              Citizen Portal
+            </span>
+            <span class="bg-teal-500/20 text-teal-300 text-[9px] font-bold px-1.5 py-0.2 rounded border border-teal-500/30 font-mono">
+              KYC VERIFIED
+            </span>
+          </div>
+          <p class="text-[11px] text-emerald-300/70">Nature-First Civic Dispatch • Duty Lock • Direct Contact</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs & Logged-In Controls -->
+      <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+        
+        <!-- Mobile Phone Live Share Button -->
+        <button id="btn-open-mobile-share" class="px-2.5 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 font-bold flex items-center space-x-1 transition" title="Open on Mobile Phone">
+          <i class="fas fa-mobile-alt text-xs"></i>
+          <span class="hidden sm:inline">📱 Share to Phone</span>
+        </button>
+
+        <!-- Problem Framing Button -->
+        <button id="btn-open-pitch" class="hidden md:flex px-2.5 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 font-bold items-center space-x-1 transition" title="View 22% Problem Framing">
+          <span>💡 22% Gap</span>
+        </button>
+
+        <!-- Live Accumulated User Credits / Points Pill -->
+        <div id="header-user-credits-pill" class="flex items-center space-x-1.5 px-3 py-1.5 bg-[#093526] border border-emerald-700/80 rounded-xl text-xs font-mono font-bold text-emerald-200 shadow-inner">
+          <span id="header-credits-icon">🌱</span>
+          <span id="header-credits-text">0 Eco-Points</span>
+        </div>
+
+        <!-- Current User Pill & Switch Role Button -->
+        <div class="flex items-center bg-[#093526] rounded-xl p-1 border border-emerald-800/60 shadow-inner">
+          <div class="px-2.5 py-1 text-emerald-200 font-medium">
+            <span class="text-emerald-400/80 text-[10px] block -mb-0.5">Logged in as</span>
+            <strong id="header-user-name" class="text-white text-xs">Lakshmi Narayana</strong>
+          </div>
+
+          <button id="btn-switch-role" class="px-3 py-1.5 rounded-lg font-bold text-xs bg-emerald-800 hover:bg-emerald-700 text-emerald-100 transition flex items-center space-x-1" title="Switch Portal Role">
+            <i class="fas fa-exchange-alt text-[10px]"></i>
+            <span>Switch / Logout</span>
+          </button>
+        </div>
+
+        <!-- Firebase Pill -->
+        <button id="btn-open-firebase" class="px-2 py-1.5 rounded-lg border border-emerald-800/60 bg-[#093526] hover:bg-emerald-800 text-emerald-300 flex items-center transition" title="Firebase Settings">
+          <span id="firebase-dot" class="w-2 h-2 rounded-full bg-amber-400 mr-1"></span>
+          <span class="text-emerald-300">⚙</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Problem Statement Strip (22% Leakage Gap) -->
+    <section class="bg-gradient-to-r from-[#062319] via-[#0b3d2c] to-[#062319] text-white border-b border-emerald-900/60 py-2 px-4 sm:px-6 shrink-0 shadow-inner">
+      <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-2 text-xs">
+        
+        <!-- Core Problem Stat -->
+        <div class="flex items-center space-x-3">
+          <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-[10px] uppercase">
+            ⚡ LIVE DISPATCH ACTIVE
+          </span>
+          <p class="text-emerald-100/90 font-medium text-[11px]">
+            When a citizen reports waste, it is <strong>broadcast to all field officers</strong>. The first officer to <strong>Accept Duty</strong> locks the task, removes it from other officers, and shares their direct phone number with the citizen!
+          </p>
+        </div>
+
+        <!-- Live Counters -->
+        <div class="flex items-center space-x-4 font-semibold text-emerald-200 shrink-0 font-mono text-[11px]">
+          <div>Open: <span id="stat-reported" class="text-amber-400 font-bold">0</span></div>
+          <div>In-Duty: <span id="stat-in-duty" class="text-teal-300 font-bold">0</span></div>
+          <div>Review: <span id="stat-in-review" class="text-emerald-300 font-bold">0</span></div>
+          <div>Resolved: <span id="stat-collected" class="text-green-400 font-bold">0</span></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 1: CITIZEN PORTAL (WITH SUB-TABS: "REPORT & MAP" VS "MY RAISED ISSUES") -->
+    <!-- ========================================================================= -->
+    <div id="view-citizen" class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col space-y-4">
+      
+      <!-- Citizen Navigation Sub-Tabs -->
+      <div class="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+        <div class="flex items-center space-x-2 text-xs font-bold">
+          <button id="cit-subtab-map" class="px-4 py-2 rounded-xl bg-emerald-700 text-white shadow transition flex items-center space-x-1.5">
+            <i class="fas fa-map-marked-alt"></i>
+            <span>📍 Report Spot &amp; Live Map</span>
+          </button>
+          <button id="cit-subtab-raised" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1.5">
+            <i class="fas fa-list-check"></i>
+            <span>📋 My Raised Issues &amp; Officer Tracking</span>
+            <span id="cit-my-raised-badge" class="bg-amber-100 text-amber-800 text-[10px] font-mono px-2 py-0.2 rounded-full font-bold ml-1">0</span>
+          </button>
+        </div>
+
+        <div class="flex items-center space-x-2 text-xs">
+          <span class="hidden sm:inline text-slate-500 font-medium">Earn +10 Pts on Report, +25 Pts on Resolution</span>
+          <div class="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl text-emerald-900 font-bold">
+            <span class="text-xs">🌱 Balance:</span>
+            <strong id="cit-balance-pts" class="font-mono text-emerald-700">0 PTS</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- CITIZEN SUB-VIEW A: REPORT FORM & LEAFLET MAP -->
+      <div id="cit-view-map-container" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- LEFT: Report Form + Citizen Scoreboard -->
+        <div class="lg:col-span-5 flex flex-col space-y-5">
+          
+          <!-- Report Form Card -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+            <div class="border-b border-slate-100 pb-3 mb-4 flex items-center justify-between">
+              <div>
+                <h2 class="text-sm font-bold text-slate-900">Report Dumping Site for Live Dispatch Dispatch</h2>
+                <p class="text-[11px] text-slate-500">Broadcasts instant pickup request to all nearby officers</p>
+              </div>
+              <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono">+10 Pts</span>
+            </div>
+
+            <form id="report-form" onsubmit="window.submitCitizenReport(event); return false;" class="space-y-3.5 text-xs">
+              
+              <!-- Photo Upload -->
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">
+                  1. Photo Evidence <span class="text-red-500">*</span>
+                </label>
+                
+                <div id="photo-box" class="border-2 border-emerald-500 bg-emerald-50/40 rounded-xl p-3 text-center cursor-pointer transition relative overflow-hidden">
+                  <input type="file" id="photo-input" accept="image/*" capture="environment" class="hidden" />
+                  <img id="photo-preview" class="w-full h-32 object-cover rounded-lg mb-1" alt="Waste Preview" />
+                  <div id="photo-hint" class="py-2 hidden">
+                    <div class="text-2xl mb-1">📷</div>
+                    <p class="font-bold text-slate-700 text-[11px]">Click to Take or Choose Photo</p>
+                    <p class="text-[10px] text-slate-400">JPG/PNG evidence ready</p>
+                  </div>
+                </div>
+
+                <p id="photo-required-err" class="text-rose-600 font-bold text-[10px] hidden mt-1 bg-rose-50 border border-rose-200 p-1.5 rounded-lg flex items-center">
+                  <i class="fas fa-exclamation-circle mr-1.5 text-rose-500"></i>
+                  <span>Photo evidence is strictly mandatory before placing a report!</span>
+                </p>
+
+                <!-- Quick Presets -->
+                <div class="flex items-center space-x-1.5 mt-1.5 text-[10px]">
+                  <span class="text-slate-400 font-semibold">Presets:</span>
+                  <button type="button" class="preset-btn px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 font-medium" data-type="dry">🔵 Dry</button>
+                  <button type="button" class="preset-btn px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 font-medium" data-type="wet">🟢 Wet</button>
+                  <button type="button" class="preset-btn px-2 py-0.5 bg-rose-50 text-rose-700 rounded border border-rose-200 font-medium" data-type="hazardous">🔴 Hazard</button>
+                </div>
+              </div>
+
+              <!-- Auto-Capture GPS -->
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block font-bold text-slate-700">
+                    2. Auto-Capture GPS Location <span class="text-red-500">*</span>
+                  </label>
+                  <button type="button" id="btn-re-gps" class="text-blue-600 hover:underline font-bold text-[10px]">
+                    ↻ Re-detect GPS
+                  </button>
+                </div>
+                
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                  <div class="flex items-center space-x-2">
+                    <span class="text-sm">📍</span>
+                    <div>
+                      <p id="gps-display" class="font-mono font-bold text-slate-800 text-[11px]">16.50620° N, 80.64800° E</p>
+                      <p class="text-[9px] text-slate-400">Browser Geolocation API</p>
+                    </div>
+                  </div>
+                  <span id="gps-badge" class="px-2 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 text-emerald-800">
+                    GPS Ready
+                  </span>
+                </div>
+              </div>
+
+              <!-- Waste Type Dropdown -->
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">
+                  3. Waste Stream Type (SWM 2016) <span class="text-red-500">*</span>
+                </label>
+                <select id="waste-type-select" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
+                  <option value="dry">🔵 Dry / Recyclable (Plastics, packaging, paper, metal, glass)</option>
+                  <option value="wet">🟢 Wet / Biodegradable (Kitchen food, organic waste)</option>
+                  <option value="hazardous">🔴 Domestic Hazardous (Batteries, CFL bulbs, chemicals)</option>
+                </select>
+              </div>
+
+              <!-- Reporter Name & Note -->
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Your Verified Name *</label>
+                  <input type="text" id="input-reporter" readonly class="w-full p-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800" />
+                </div>
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Landmark Note</label>
+                  <input type="text" id="desc-input" placeholder="e.g. Near transformer corner" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none" />
+                </div>
+              </div>
+
+              <!-- Submit Button -->
+              <button type="button" id="btn-broadcast-report" onclick="window.submitCitizenReport(event)" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black rounded-xl shadow-lg flex items-center justify-center space-x-2 text-xs transition cursor-pointer border border-emerald-500">
+                <i class="fas fa-paper-plane text-emerald-200"></i>
+                <span>Broadcast Pickup Request (+10 Pts)</span>
+              </button>
+
+            </form>
+          </div>
+
+          <!-- Scoreboard: Citizen Leaderboard Card -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+              <div class="flex items-center space-x-2">
+                <span class="text-base">🏆</span>
+                <h3 class="font-bold text-sm text-slate-900">Citizen Scoreboard</h3>
+              </div>
+              <span class="text-[10px] text-slate-400 font-semibold uppercase">Verified Points</span>
+            </div>
+
+            <div id="scoreboard-list" class="space-y-2">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT: Live Leaflet Map & Incident Queue -->
+        <div class="lg:col-span-7 flex flex-col space-y-4">
+          
+          <!-- Leaflet Map Container -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 overflow-hidden h-[360px] md:h-[420px] relative">
+            <div id="map" class="w-full h-full rounded-xl"></div>
+            <div class="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] font-semibold text-slate-700 pointer-events-none z-[400]">
+              💡 Yellow: Open • Blue: Officer En Route • Indigo: Proof Uploaded • Green: Resolved
+            </div>
+          </div>
+
+          <!-- Live Broadcast Queue -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex-1">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center space-x-2">
+                <h3 class="font-bold text-sm text-slate-900">City-Wide Incidents Feed</h3>
+                <span id="queue-count" class="bg-slate-100 text-slate-700 font-mono text-[10px] font-bold px-2 py-0.5 rounded-full">0</span>
+              </div>
+              <button id="btn-reset" class="text-xs text-emerald-600 hover:text-emerald-800 font-bold underline">
+                ↺ Reset to Clean Slate
+              </button>
+            </div>
+
+            <div id="incident-list" class="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- CITIZEN SUB-VIEW B: "MY RAISED ISSUES & LIVE DISPATCH OFFICER TRACKING" -->
+      <div id="cit-view-raised-container" class="space-y-4 hidden">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+          <div class="flex items-center justify-between border-b pb-3 mb-4">
+            <div>
+              <h3 class="font-bold text-base text-slate-900 flex items-center space-x-2">
+                <span>📋 My Raised Waste Issues (Instant Tracking)</span>
+                <span id="cit-my-total-count" class="bg-emerald-100 text-emerald-800 text-xs font-mono font-bold px-2 py-0.5 rounded-full">0 Issues</span>
+              </h3>
+              <p class="text-xs text-slate-500">Track which Sanitation Officer took up your issue and call them directly</p>
+            </div>
+          </div>
+
+          <div id="cit-my-issues-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 2: OFFICER FIELD CLEARANCE (WITH TABS: "AVAILABLE POOL" VS "MY DUTIES") -->
+    <!-- ========================================================================= -->
+    <div id="view-officer" class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 hidden flex-col space-y-5">
+      
+      <!-- Officer Header Hero (Prakriti Nature Theme) -->
+      <div class="bg-gradient-to-r from-[#062319] via-[#0b3d2c] to-[#062319] text-emerald-100 rounded-3xl p-6 shadow-xl border border-emerald-800/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center space-x-2 mb-1">
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/30 border border-emerald-400 text-emerald-200 font-bold text-xs uppercase">
+              ⚡ Instant Nature Duty Dispatch
+            </span>
+            <span id="officer-active-badge" class="text-emerald-300 text-xs font-mono font-bold">✔ Authorized Field Officer</span>
+          </div>
+          <h2 class="text-xl font-black text-white" id="officer-welcome-header">Sanitation Spot Clearance &amp; Task Lock</h2>
+          <p class="text-xs text-emerald-200/80 mt-1 max-w-2xl">
+            Accept open citizen waste pickup requests in your ward. When you accept an issue, it is <strong>locked to you</strong>, removed from other officers, and your direct contact is shared with the citizen.
+          </p>
+        </div>
+        <div class="bg-[#051c14] px-4 py-3 rounded-2xl border border-emerald-700/80 shrink-0 text-center shadow-inner flex flex-col justify-center">
+          <p class="text-[10px] text-emerald-400 font-bold uppercase">Accumulated Duty Credits</p>
+          <p class="text-xl font-black text-amber-300 font-mono" id="off-hero-credits">+0 Credits</p>
+          <p class="text-[10px] text-emerald-300/80 font-mono">+50 Credits per clearance</p>
+        </div>
+      </div>
+
+      <!-- Officer Navigation Sub-Tabs -->
+      <div class="flex items-center space-x-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm text-xs font-bold">
+        <button id="off-subtab-available" class="px-4 py-2 rounded-xl bg-emerald-700 text-white shadow transition flex items-center space-x-1.5">
+          <i class="fas fa-bolt text-amber-400"></i>
+          <span>⚡ Available Requests Pool (Open for Pickup)</span>
+          <span id="off-available-count-badge" class="bg-amber-400 text-slate-950 font-mono text-[10px] font-black px-2 py-0.2 rounded-full ml-1">0</span>
+        </button>
+
+        <button id="off-subtab-my-duties" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1.5">
+          <i class="fas fa-motorcycle"></i>
+          <span>🛵 My Active Assigned Duties</span>
+          <span id="off-my-duties-count-badge" class="bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold px-2 py-0.2 rounded-full ml-1">0</span>
+        </button>
+
+        <button id="off-subtab-completed" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1.5">
+          <i class="fas fa-check-circle text-emerald-600"></i>
+          <span>✔ Completed Clearances</span>
+        </button>
+      </div>
+
+      <!-- OFFICER SUB-VIEW A: AVAILABLE OPEN REQUESTS (LIVE DISPATCH POOL) -->
+      <div id="off-view-available-container" class="space-y-4">
+        <div class="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
+          <div>
+            <h3 class="font-bold text-sm text-slate-800 flex items-center space-x-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>Live Broadcast Feed: Open Citizen Waste Requests</span>
+            </h3>
+            <p class="text-[11px] text-slate-500">First officer to accept locks the duty &amp; shares contact with the citizen</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="off-available-cards-grid">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- OFFICER SUB-VIEW B: MY ACTIVE ASSIGNED DUTIES -->
+      <div id="off-view-my-duties-container" class="space-y-4 hidden">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-sm text-slate-800">
+            Tasks Locked by You (Execute Clearance &amp; Upload Proof)
+          </h3>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="off-my-duties-cards-grid">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- OFFICER SUB-VIEW C: COMPLETED DUTIES -->
+      <div id="off-view-completed-container" class="space-y-4 hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="off-completed-cards-grid">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 3: ADMIN COMMAND CENTER (BEFORE VS AFTER PROOF, BAN CONTROLS & DUAL CREDITS) -->
+    <!-- ========================================================================= -->
+    <div id="view-admin" class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 hidden space-y-6">
+      
+      <!-- Admin Hero Banner (Prakriti Nature Theme) -->
+      <div class="bg-gradient-to-r from-[#062319] via-[#093526] to-[#062319] text-white rounded-3xl p-6 shadow-xl border border-emerald-800/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center space-x-2 mb-1">
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-bold text-xs uppercase">
+              👑 Prakriti Municipal Command Center
+            </span>
+            <span class="text-emerald-400 text-xs font-mono font-bold">● Secure Session Active</span>
+          </div>
+          <h2 class="text-xl font-black text-white">Live Dispatch Surveillance, Officer Approvals &amp; Dual Credits</h2>
+          <p class="text-xs text-emerald-200/80 mt-1 max-w-2xl">
+            Monitor real-time task assignments, approve new officer registrations, verify <strong>Before/After Clearance Proofs</strong>, and ban fraudulent accounts.
+          </p>
+        </div>
+
+        <div class="flex items-center space-x-3 shrink-0">
+          <button id="btn-export-csv" class="px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 border border-emerald-700 font-bold rounded-xl text-xs shadow flex items-center space-x-2 transition">
+            <i class="fas fa-download"></i>
+            <span>Export SWM CSV</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SECTION A: PENDING OFFICER ACCOUNT APPROVALS -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+          <div>
+            <h3 class="font-bold text-base text-slate-900 flex items-center space-x-2">
+              <span>🛡️ Officer Registration &amp; Access Requests</span>
+              <span id="admin-officer-req-badge" class="bg-amber-100 text-amber-800 text-xs font-mono font-bold px-2 py-0.5 rounded-full">0 Pending</span>
+            </h3>
+            <p class="text-xs text-slate-500">Sanitation Officers must be accepted by Admin before they can log in to the Officer Portal</p>
+          </div>
+        </div>
+
+        <div id="admin-officer-requests-container" class="space-y-3">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- SECTION B: INCIDENT PHOTO VERIFICATION GRID -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+          <div>
+            <h3 class="font-bold text-base text-slate-900">Ground Resolution Proof Review Queue</h3>
+            <p class="text-xs text-slate-500">Inspect Before/After photographic evidence and authorize resolution</p>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <span class="px-3 py-1 bg-indigo-50 text-indigo-700 font-bold rounded-xl border border-indigo-200">
+              Awaiting Admin Review: <span id="admin-pending-review-count" class="font-mono">0</span>
+            </span>
+          </div>
+        </div>
+
+        <div id="admin-verification-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+
+      <!-- SECTION C: ANTI-FRAUD BAN CONTROLS & PERFORMANCE ROSTERS -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Citizen User Management & Ban Controls in Admin -->
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+          <div class="flex items-center justify-between border-b pb-3 mb-4">
+            <div>
+              <h4 class="font-bold text-sm text-slate-900">👤 Citizen KYC Roster &amp; Anti-Fraud Controls</h4>
+              <p class="text-[10px] text-slate-500">Ban users who submit fake or non-existent waste reports</p>
+            </div>
+            <span class="text-[10px] text-rose-600 font-bold">🚫 Admin Ban Action</span>
+          </div>
+          <div id="admin-citizen-roster" class="space-y-3 text-xs">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Officer Management & Ban Controls in Admin -->
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+          <div class="flex items-center justify-between border-b pb-3 mb-4">
+            <div>
+              <h4 class="font-bold text-sm text-slate-900">🛡️ ULB Officer Roster &amp; Disciplinary Controls</h4>
+              <p class="text-[10px] text-slate-500">Suspend officers for fraudulent clearance proof submissions</p>
+            </div>
+            <span class="text-[10px] text-rose-600 font-bold">🚫 Admin Ban Action</span>
+          </div>
+          <div id="admin-officer-roster" class="space-y-3 text-xs">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 1: OFFICER UPLOAD CLEARANCE PROOF -->
+  <!-- ========================================================================= -->
+  <div id="officer-proof-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden p-6 space-y-4 text-xs">
+      
+      <div class="flex items-center justify-between border-b pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">🛡️</span>
+          <div>
+            <h3 class="font-bold text-sm text-slate-900">Upload Site Clearance Proof</h3>
+            <p class="text-[11px] text-slate-500" id="proof-modal-spot-id">Resolving Spot #VMC-101</p>
+          </div>
+        </div>
+        <button id="btn-close-proof-modal" class="text-slate-400 hover:text-slate-600 text-base">✕</button>
+      </div>
+
+      <form id="officer-proof-form" onsubmit="window.submitOfficerProof(event); return false;" class="space-y-3.5">
+        
+        <!-- Officer ID & Name -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Officer / Crew ID *</label>
+            <input type="text" id="proof-officer-id" readonly class="w-full p-2 bg-slate-100 border border-slate-200 rounded-xl font-mono text-xs font-bold text-indigo-700" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Officer Name *</label>
+            <input type="text" id="proof-officer-name" readonly class="w-full p-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-800" />
+          </div>
+        </div>
+
+        <!-- Clearance Photo Upload Box -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">
+            Photo of Cleared / Restored Location <span class="text-red-500">*</span>
+          </label>
+          
+          <div id="proof-photo-box" class="border-2 border-dashed border-emerald-500 bg-emerald-50/40 rounded-xl p-4 text-center cursor-pointer transition relative overflow-hidden">
+            <input type="file" id="proof-file-input" accept="image/*" capture="environment" class="hidden" />
+            <img id="proof-photo-preview" class="w-full h-36 object-cover rounded-lg mb-1" alt="Cleared Site" />
+            <div id="proof-photo-hint" class="py-2 hidden">
+              <i class="fas fa-camera text-2xl text-emerald-600 mb-1"></i>
+              <p class="font-bold text-slate-800 text-xs">Tap to Capture Cleaned Site Photo</p>
+              <p class="text-[10px] text-slate-400">Shows waste cleared &amp; sanitized</p>
+            </div>
+          </div>
+
+          <!-- Quick Cleaned Presets -->
+          <div class="flex items-center space-x-1.5 mt-2 text-[10px]">
+            <span class="text-slate-400 font-semibold">Demo Proof:</span>
+            <button type="button" class="preset-clean-btn px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded border border-emerald-300 font-bold" data-style="clean_street">
+              ✔ Cleaned Street Spot
+            </button>
+            <button type="button" class="preset-clean-btn px-2 py-0.5 bg-blue-100 text-blue-800 rounded border border-blue-300 font-bold" data-style="cleared_bin">
+              ✔ Cleared &amp; Sanitized Bin
+            </button>
+          </div>
+
+          <p id="proof-photo-required-err" class="text-rose-600 font-bold text-[10px] hidden mt-1.5 bg-rose-50 border border-rose-200 p-1.5 rounded-lg flex items-center">
+            <i class="fas fa-exclamation-circle mr-1.5 text-rose-500"></i>
+            <span>Cleaned location photographic proof is strictly required before submitting resolution request!</span>
+          </p>
+        </div>
+
+        <!-- Clearance Notes -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Sanitation Action Taken *</label>
+          <input type="text" id="proof-action-note" required value="Waste cleared into Compactor Truck AP-16-TX-4401; lime bleaching applied." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+        </div>
+
+        <div class="pt-2 flex items-center justify-end space-x-2 border-t">
+          <button type="button" id="btn-cancel-proof" class="px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl">
+            Cancel
+          </button>
+          <button type="button" id="btn-submit-officer-proof" onclick="window.submitOfficerProof(event)" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg flex items-center space-x-1.5 cursor-pointer">
+            <i class="fas fa-upload"></i>
+            <span>Submit Proof for Admin Review</span>
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MOBILE SHARE & ONLINE CLOUD DEPLOYMENT -->
+  <div id="mobile-share-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden p-6 space-y-4 text-xs">
+      
+      <div class="flex items-center justify-between border-b pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">📱</span>
+          <div>
+            <h3 class="font-bold text-sm text-slate-900">Open Live on Real Smartphones</h3>
+            <p class="text-[11px] text-slate-500">Scan QR or share public link to test real user KYC registration</p>
+          </div>
+        </div>
+        <button id="btn-close-mobile-share" class="text-slate-400 hover:text-slate-600 text-base">✕</button>
+      </div>
+
+      <!-- Live Wi-Fi / Hotspot QR Code -->
+      <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row items-center gap-4">
+        <div class="w-32 h-32 bg-white p-2 border border-slate-200 rounded-xl shadow-inner shrink-0 flex items-center justify-center">
+          <img id="qr-code-img" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://172.18.2.202:8080" class="w-full h-full object-contain" alt="QR Code" />
+        </div>
+        <div class="space-y-1.5 text-center sm:text-left">
+          <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+            ⚡ INSTANT LOCAL WI-FI ACCESS
+          </span>
+          <h4 class="font-bold text-xs text-slate-900">Scan with Phone Camera</h4>
+          <p class="text-[11px] text-slate-500 leading-relaxed">
+            Open this URL on any phone connected to the same Wi-Fi / Hotspot:
+          </p>
+          <div class="p-2 bg-slate-900 text-emerald-400 font-mono font-bold text-[11px] rounded-lg select-all text-center">
+            http://172.18.2.202:8080
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2 text-right border-t">
+        <button id="btn-close-mobile-share-2" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition text-xs">
+          Done
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Problem Context & Pitch Modal -->
+  <div id="pitch-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden p-6 space-y-4 text-xs">
+      <div class="flex items-center justify-between border-b pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">📊</span>
+          <h3 class="font-bold text-sm text-slate-900 font-heading">Problem Framing: India's Solid Waste Dilemma</h3>
+        </div>
+        <button id="btn-close-pitch" class="text-slate-400 hover:text-slate-600 text-base">✕</button>
+      </div>
+
+      <div class="space-y-3 text-slate-600 leading-relaxed text-[11px]">
+        <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900">
+          <p class="font-bold text-xs mb-1 text-rose-950">🚨 The 22% Collection Leakage Gap</p>
+          <p>India produces <strong>~1.7 lakh tonnes</strong> of Municipal Solid Waste daily. Approximately <strong>54%</strong> is scientifically processed. But <strong>22% (~37,400 tonnes/day)</strong> disappears due to last-mile collection leakages — dumped into storm drains, open plots, or burned illegally.</p>
+        </div>
+
+        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900">
+          <p class="font-bold text-xs mb-1 text-emerald-950">🌱 Instant Task Dispatch Solution</p>
+          <p>1. <strong>Citizen</strong> reports waste with auto-GPS (+10 pts).<br />
+             2. <strong>Officers</strong> receive live broadcast. The first to accept locks duty &amp; direct phone line.<br />
+             3. <strong>Officer</strong> clears spot and uploads "After" clearance photo proof.<br />
+             4. <strong>Municipal Admin</strong> verifies photographic evidence side-by-side and disburses dual reward credits (+25 pts to Citizen, +50 credits to Officer).</p>
+        </div>
+      </div>
+
+      <div class="pt-2 text-right">
+        <button id="btn-close-pitch-2" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition">
+          Got It, Back to App
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase Modal -->
+  <div id="firebase-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden p-6 space-y-4 text-xs">
+      <div class="flex items-center justify-between border-b pb-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xl">🔥</span>
+          <h3 class="font-bold text-sm text-slate-900">Firebase Firestore Cloud Sync</h3>
+        </div>
+        <button id="btn-close-firebase" class="text-slate-400 hover:text-slate-600 text-base">✕</button>
+      </div>
+
+      <p class="text-slate-600 leading-relaxed text-[11px]">
+        Connect your Firebase Project credentials to stream waste reports and scoreboards in real time across multiple mobile devices!
+      </p>
+
+      <form id="firebase-form" class="space-y-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">API Key</label>
+          <input type="text" id="fb-apikey" placeholder="AIzaSy..." class="w-full p-2 bg-slate-50 border rounded-lg font-mono text-[11px]" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Project ID</label>
+          <input type="text" id="fb-projectid" placeholder="greenpulse-pilot" class="w-full p-2 bg-slate-50 border rounded-lg font-mono text-[11px]" />
+        </div>
+
+        <div class="flex items-center justify-between pt-2">
+          <button type="button" id="btn-disconnect-fb" class="text-rose-600 font-bold hover:underline">
+            Use Local Offline Mode
+          </button>
+          <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition">
+            Save &amp; Connect
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-4 max-w-sm z-[999999] p-4 rounded-2xl shadow-2xl text-white font-semibold text-xs flex items-start space-x-3 transition-all duration-300 transform translate-y-24 opacity-0">
+    <div id="toast-icon" class="text-base mt-0.5"></div>
+    <div class="flex-1">
+      <p id="toast-title" class="font-bold text-sm text-white"></p>
+      <p id="toast-body" class="text-slate-100 mt-0.5"></p>
+    </div>
+  </div>
+
+  <!-- Main Application Script -->
+  <script type="module">
+    // Presets
+    const PRESETS = {
+      dry: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260'><rect width='400' height='260' fill='%231e293b'/><rect x='30' y='60' width='340' height='160' rx='12' fill='%23334155'/><path d='M60 180 L120 110 L180 170 L250 90 L340 180 Z' fill='%232563eb' opacity='0.7'/><circle cx='100' cy='95' r='20' fill='%2360a5fa' opacity='0.8'/><rect x='130' y='140' width='70' height='50' fill='%2394a3b8' rx='4'/><rect x='210' y='150' width='60' height='40' fill='%23cbd5e1' rx='4'/><text x='200' y='235' fill='%2393c5fd' font-size='13' font-family='sans-serif' text-anchor='middle' font-weight='bold'>DRY: Cartons &amp; Single-use Plastic</text></svg>",
+      wet: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260'><rect width='400' height='260' fill='%23064e3b'/><rect x='30' y='60' width='340' height='160' rx='12' fill='%23065f46'/><path d='M50 190 C100 130, 160 180, 220 120 C280 170, 320 130, 350 190 Z' fill='%23059669' opacity='0.8'/><circle cx='280' cy='100' r='18' fill='%2334d399' opacity='0.7'/><ellipse cx='140' cy='160' rx='40' ry='20' fill='%2310b981'/><text x='200' y='235' fill='%23a7f3d0' font-size='13' font-family='sans-serif' text-anchor='middle' font-weight='bold'>WET: Decomposing Market Food Waste</text></svg>",
+      hazardous: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260'><rect width='400' height='260' fill='%23450a0a'/><rect x='30' y='60' width='340' height='160' rx='12' fill='%237f1d1d'/><polygon points='200,80 230,140 170,140' fill='%23ef4444'/><text x='200' y='130' fill='%23ffffff' font-size='22' font-family='sans-serif' text-anchor='middle' font-weight='bold'>!</text><rect x='80' y='150' width='90' height='40' fill='%23b91c1c' rx='6'/><rect x='230' y='145' width='90' height='45' fill='%23991b1b' rx='6'/><text x='200' y='235' fill='%23fca5a5' font-size='13' font-family='sans-serif' text-anchor='middle' font-weight='bold'>HAZARDOUS: Broken Mercury Bulbs &amp; Cells</text></svg>",
+      clean_street: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260'><rect width='400' height='260' fill='%23064e3b'/><rect x='20' y='40' width='360' height='180' rx='12' fill='%23047857'/><path d='M20 180 Q200 130 380 180 L380 220 L20 220 Z' fill='%23059669'/><circle cx='200' cy='110' r='36' fill='%2310b981'/><text x='200' y='120' fill='%23ffffff' font-size='32' font-family='sans-serif' text-anchor='middle'>✓</text><text x='200' y='205' fill='%23a7f3d0' font-size='14' font-family='sans-serif' text-anchor='middle' font-weight='bold'>OFFICER PROOF: Site 100% Cleared &amp; Sanitized</text></svg>",
+      cleared_bin: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260'><rect width='400' height='260' fill='%230f172a'/><rect x='40' y='50' width='320' height='160' rx='10' fill='%231e293b'/><circle cx='200' cy='115' r='30' fill='%233b82f6'/><text x='200' y='125' fill='%23ffffff' font-size='26' font-family='sans-serif' text-anchor='middle'>✓</text><text x='200' y='185' fill='%2393c5fd' font-size='13' font-family='sans-serif' text-anchor='middle' font-weight='bold'>OFFICER PROOF: Bin Emptied into Compactor</text></svg>"
+    };
+
+    // Clean Production User Databases (No pre-existing accounts)
+    const INITIAL_CITIZENS = [];
+    const INITIAL_OFFICERS = [];
+    const INITIAL_REPORTS = [];
+
+    let reports = JSON.parse(localStorage.getItem("greenpulse_reports_clean_v8")) || INITIAL_REPORTS;
+    let citizens = JSON.parse(localStorage.getItem("greenpulse_citizens_clean_v8")) || INITIAL_CITIZENS;
+    let officers = JSON.parse(localStorage.getItem("greenpulse_officers_clean_v8")) || INITIAL_OFFICERS;
+    
+    // Auth Session State
+    let currentUser = {
+      role: "citizen",
+      username: "",
+      name: "",
+      officerId: null,
+      phone: ""
+    };
+
+    let currentCoords = { lat: 16.5062, lng: 80.6480 };
+    let currentPhoto = PRESETS.dry; // Ready-to-use default preset (can be replaced by user)
+    let currentOfficerProofPhoto = PRESETS.clean_street; // Ready-to-use default preset
+    let activeSpotForProof = null;
+    let map = null;
+    let markers = {};
+
+    const globalDispatchChannel = window.BroadcastChannel ? new BroadcastChannel('greenpulse_dispatch_stream') : null;
+
+    // Firebase state
+    let db = null;
+    let unsubscribeFirestore = null;
+
+    // 1. Initialize Map (Called AFTER Login)
+    function initMap() {
+      if (map) {
+        map.invalidateSize();
+        return;
+      }
+      const mapEl = document.getElementById("map");
+      if (!mapEl) return;
+
+      map = L.map("map").setView([16.5120, 80.6400], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; OpenStreetMap | GreenPulse'
+      }).addTo(map);
+
+      map.on("click", function(e) {
+        currentCoords = { lat: Number(e.latlng.lat.toFixed(5)), lng: Number(e.latlng.lng.toFixed(5)) };
+        updateGPSUI(currentCoords.lat, currentCoords.lng, "Manual Map Pin");
+      });
+
+      renderPins();
+    }
+
+    // 2. Render Pins on Map
+    function renderPins() {
+      if (!map) return;
+      Object.values(markers).forEach(m => map.removeLayer(m));
+      markers = {};
+
+      reports.forEach(r => {
+        const iconType = r.wasteType === 'dry' ? 'dry' : r.wasteType === 'wet' ? 'wet' : 'hazardous';
+        const iconSymbol = r.wasteType === 'dry' ? '📦' : r.wasteType === 'wet' ? '🍎' : '⚠️';
+        const statusClass = r.status;
+
+        const customIcon = L.divIcon({
+          className: '',
+          html: `
+            <div class="pin ${iconType}">
+              <span>${iconSymbol}</span>
+              <div class="status-ring ${statusClass}"></div>
+            </div>
+          `,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+          popupAnchor: [0, -17]
+        });
+
+        const statusLabel = r.status === 'collected' ? 'RESOLVED' : r.status === 'proof_submitted' ? 'PROOF IN REVIEW' : r.status === 'accepted' ? 'OFFICER EN ROUTE' : 'OPEN FOR PICKUP';
+        const statusColor = r.status === 'collected' ? '#059669' : r.status === 'proof_submitted' ? '#4f46e5' : r.status === 'accepted' ? '#2563eb' : '#d97706';
+
+        const popup = `
+          <div style="font-family: sans-serif; font-size: 12px; width: 250px;">
+            <div style="font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+              <span>${r.id} (${r.wasteType.toUpperCase()})</span>
+              <span style="color: ${statusColor}; font-weight: bold; font-size: 10px;">${statusLabel}</span>
+            </div>
+            <img src="${r.photo}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 8px; margin-bottom: 6px;" />
+            <p style="color: #475569; margin-bottom: 4px;">${r.desc || 'Waste dumping spot'}</p>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #334155; margin-bottom: 8px;">
+              <span>Citizen: <strong>${r.reporter || 'Citizen'}</strong></span>
+              <span style="color: #d97706; font-weight: bold;">${r.points || 10} PTS</span>
+            </div>
+
+            ${r.status === 'pending' && currentUser.role === 'officer' ? `
+              <button onclick="window.officerAcceptDuty('${r.id}')" style="width: 100%; padding: 8px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; color: #fff; background: #2563eb; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <span>🛵 Accept &amp; Lock Duty</span>
+              </button>
+            ` : r.status === 'accepted' ? `
+              <div style="font-size: 11px; padding: 6px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-align: center; color: #1e40af;">
+                <p style="font-weight: bold;">🛵 ${r.officerName || 'Officer'} En Route</p>
+                <a href="tel:${r.officerPhone}" style="display: inline-block; margin-top: 4px; padding: 3px 8px; background: #2563eb; color: #fff; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 10px;">📞 Call ${r.officerPhone}</a>
+              </div>
+            ` : r.status === 'proof_submitted' ? `
+              <div style="font-size: 11px; text-align: center; color: #4f46e5; padding: 5px; background: #eef2ff; border-radius: 6px; font-weight: bold;">
+                ⏳ Proof Uploaded by ${r.officerName || 'Officer'} • In Review
+              </div>
+            ` : `
+              <div style="font-size: 11px; text-align: center; color: #059669; padding: 5px; background: #ecfdf5; border-radius: 6px; font-weight: bold;">
+                ✔ Cleared &amp; Resolved by Municipal Admin
+              </div>
+            `}
+          </div>
+        `;
+
+        const m = L.marker([r.lat, r.lng], { icon: customIcon }).addTo(map).bindPopup(popup);
+        markers[r.id] = m;
+      });
+    }
+
+    // 3. Render All Views & Data
+    function renderUI() {
+      const total = reports.length;
+      const collected = reports.filter(r => r.status === 'collected').length;
+      const inReview = reports.filter(r => r.status === 'proof_submitted').length;
+      const inDuty = reports.filter(r => r.status === 'accepted').length;
+      const openPending = reports.filter(r => r.status === 'pending').length;
+
+      const elTotal = document.getElementById("stat-total");
+      if (elTotal) elTotal.innerText = total;
+      const elRep = document.getElementById("stat-reported");
+      if (elRep) elRep.innerText = openPending;
+      const elDuty = document.getElementById("stat-in-duty");
+      if (elDuty) elDuty.innerText = inDuty;
+      const elRev = document.getElementById("stat-in-review");
+      if (elRev) elRev.innerText = inReview;
+      const elCol = document.getElementById("stat-collected");
+      if (elCol) elCol.innerText = collected;
+      const elQueue = document.getElementById("queue-count");
+      if (elQueue) elQueue.innerText = total;
+
+      // Update Header Info
+      const elHeaderUser = document.getElementById("header-user-name");
+      if (elHeaderUser) elHeaderUser.innerText = currentUser.name;
+      
+      const roleBadge = document.getElementById("active-role-badge");
+      if (roleBadge) {
+        if (currentUser.role === 'citizen') {
+          roleBadge.className = "bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30 uppercase";
+          roleBadge.innerText = "Citizen Portal";
+        } else if (currentUser.role === 'officer') {
+          roleBadge.className = "bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30 uppercase";
+          roleBadge.innerText = `Officer: ${currentUser.officerId || 'VMC-OFF'}`;
+        } else if (currentUser.role === 'admin') {
+          roleBadge.className = "bg-amber-500/20 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/30 uppercase";
+          roleBadge.innerText = "Admin Command Center";
+        }
+      }
+
+      // Update Live User Credits / Points
+      let citBalancePts = 0;
+      let offTotalCredits = 0;
+
+      // 1. Citizen balance (Total reports points)
+      const userReports = reports.filter(r => (r.reporterUsername && r.reporterUsername === currentUser.username) || r.reporter === currentUser.name);
+      citBalancePts = userReports.reduce((acc, curr) => acc + (curr.points || 10), 0);
+
+      // 2. Officer balance (Total duty credits on resolved spots)
+      const offReports = reports.filter(r => (r.officerId === currentUser.officerId || r.officerName === currentUser.name) && r.status === 'collected');
+      offTotalCredits = offReports.reduce((acc, curr) => acc + (curr.officerCredits || 50), 0);
+
+      let userCreditsText = "0 Eco-Points";
+      let userCreditsIcon = "🌱";
+
+      if (currentUser.role === 'citizen') {
+        userCreditsText = `${citBalancePts} Eco-Points`;
+        userCreditsIcon = "🌱";
+      } else if (currentUser.role === 'officer') {
+        userCreditsText = `${offTotalCredits} Duty Credits`;
+        userCreditsIcon = "🎖️";
+      } else if (currentUser.role === 'admin') {
+        userCreditsText = "Municipal Admin";
+        userCreditsIcon = "👑";
+      }
+
+      const elCreditsPill = document.getElementById("header-credits-text");
+      if (elCreditsPill) elCreditsPill.innerText = userCreditsText;
+      const elCreditsIcon = document.getElementById("header-credits-icon");
+      if (elCreditsIcon) elCreditsIcon.innerText = userCreditsIcon;
+
+      const elCitBal = document.getElementById("cit-balance-pts");
+      if (elCitBal) elCitBal.innerText = `${citBalancePts} PTS`;
+
+      const elOffHeroCredits = document.getElementById("off-hero-credits");
+      if (elOffHeroCredits) elOffHeroCredits.innerText = `+${offTotalCredits} Credits`;
+
+      // Citizen Scoreboard List
+      const citizenMap = {};
+      reports.forEach(r => {
+        const name = r.reporter || "Anonymous Citizen";
+        if (!citizenMap[name]) citizenMap[name] = { name, points: 0, reportsCount: 0, collectedCount: 0 };
+        citizenMap[name].points += (r.points || 10);
+        citizenMap[name].reportsCount += 1;
+        if (r.status === 'collected') citizenMap[name].collectedCount += 1;
+      });
+      const scoreboard = Object.values(citizenMap).sort((a, b) => b.points - a.points);
+
+      const sbContainer = document.getElementById("scoreboard-list");
+      if (sbContainer) {
+        if (scoreboard.length === 0) {
+          sbContainer.innerHTML = `
+            <div class="text-center py-6 text-slate-400 space-y-1 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-3">
+              <span class="text-2xl">🌱</span>
+              <p class="text-xs font-semibold text-slate-700">Clean City! No Active Points</p>
+              <p class="text-[10px] text-slate-400">Citizen leaderboards and Swachh points will stream here live as reports are verified.</p>
+            </div>
+          `;
+        } else {
+          sbContainer.innerHTML = scoreboard.map((c, index) => {
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`;
+            return `
+              <div class="p-2 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                <div class="flex items-center space-x-2">
+                  <span class="font-bold text-sm w-5 text-center">${medal}</span>
+                  <div>
+                    <p class="font-bold text-slate-800">${c.name}</p>
+                    <p class="text-[10px] text-slate-400">${c.reportsCount} reported • ${c.collectedCount} cleared</p>
+                  </div>
+                </div>
+                <div class="text-right font-mono">
+                  <span class="font-bold text-amber-600 text-sm">+${c.points}</span>
+                  <span class="text-[10px] text-slate-400 block -mt-1 font-semibold">PTS</span>
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+      }
+
+      // City-wide Feed in Map view
+      const list = document.getElementById("incident-list");
+      if (list) {
+        if (reports.length === 0) {
+          list.innerHTML = `
+            <div class="text-center py-8 text-slate-400 space-y-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6">
+              <span class="text-3xl">✨</span>
+              <p class="text-xs font-bold text-slate-700">No Open Waste Incidents</p>
+              <p class="text-[11px] text-slate-400">All municipal wards are clear! Geotag your first waste spot on the left to broadcast a pickup request.</p>
+            </div>
+          `;
+        } else {
+          list.innerHTML = reports.map(r => {
+            const statusBadge = r.status === 'collected' ? 'bg-emerald-100 text-emerald-800' : r.status === 'proof_submitted' ? 'bg-indigo-100 text-indigo-800' : r.status === 'accepted' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800';
+            const statusText = r.status === 'collected' ? '✔ Cleared' : r.status === 'proof_submitted' ? '⏳ Proof In Review' : r.status === 'accepted' ? '🛵 Officer En Route' : '⚡ Open Pickup';
+
+            return `
+              <div onclick="window.focusPin('${r.id}')" class="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-between cursor-pointer transition">
+                <div class="flex items-center space-x-3">
+                  <img src="${r.photo}" class="w-12 h-12 rounded-lg object-cover border" />
+                  <div>
+                    <div class="flex items-center space-x-1.5">
+                      <span class="font-bold text-xs text-slate-800">${r.id}</span>
+                      <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${r.wasteType === 'dry' ? 'bg-blue-100 text-blue-800' : r.wasteType === 'wet' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${r.wasteType}</span>
+                      <span class="text-amber-600 font-mono font-bold text-[10px]">+${r.points || 10} pts</span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 truncate max-w-[170px]">${r.desc || 'Waste spot'}</p>
+                    <p class="text-[10px] text-slate-400">Reporter: ${r.reporter || 'Citizen'}</p>
+                  </div>
+                </div>
+
+                <div class="text-right">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${statusBadge} block mb-1">
+                    ${statusText}
+                  </span>
+                  ${r.status === 'pending' && currentUser.role === 'officer' ? `
+                    <button onclick="event.stopPropagation(); window.officerAcceptDuty('${r.id}')" class="text-[10px] font-bold text-blue-600 hover:underline">
+                      🛵 Accept Duty ➔
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+      }
+
+      // Render Citizen "My Raised Issues"
+      renderCitizenRaisedIssues();
+
+      // Render Officer Live Dispatch Dispatch views
+      renderOfficerLiveDispatchViews();
+
+      // Render Admin Panel sections
+      renderAdminOfficerRequests();
+      renderAdminVerification();
+      renderAdminCitizenManagement();
+      renderAdminOfficerManagement();
+
+      renderPins();
+    }
+
+    // =========================================================================
+    // 4. CITIZEN "MY RAISED ISSUES" & OFFICER DIRECT CALLING
+    // =========================================================================
+    function renderCitizenRaisedIssues() {
+      const grid = document.getElementById("cit-my-issues-grid");
+      if (!grid) return;
+
+      // Filter issues submitted by the current citizen (by username or name)
+      const myIssues = reports.filter(r => 
+        (r.reporterUsername && r.reporterUsername === currentUser.username) || 
+        r.reporter === currentUser.name
+      );
+
+      document.getElementById("cit-my-raised-badge").innerText = myIssues.length;
+      document.getElementById("cit-my-total-count").innerText = `${myIssues.length} Issues Raised by You`;
+
+      if (myIssues.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-2 text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-6 space-y-2">
+            <span class="text-3xl">🌿</span>
+            <p class="font-bold text-sm text-slate-700">No Waste Issues Raised Yet</p>
+            <p class="text-xs text-slate-400">Switch to the "Report Spot &amp; Live Map" tab to geotag your first waste spot and dispatch nearby officers!</p>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = myIssues.map(r => {
+        const isOpen = r.status === 'pending';
+        const isAccepted = r.status === 'accepted';
+        const isProofSubmitted = r.status === 'proof_submitted';
+        const isResolved = r.status === 'collected';
+
+        return `
+          <div class="bg-white rounded-2xl border ${isAccepted ? 'border-blue-400 ring-2 ring-blue-500/20' : 'border-slate-200'} shadow-sm p-4 space-y-3 flex flex-col justify-between">
+            
+            <div>
+              <div class="flex items-center justify-between border-b pb-2 mb-2">
+                <div class="flex items-center space-x-2">
+                  <span class="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded">${r.id}</span>
+                  <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${r.wasteType === 'dry' ? 'bg-blue-100 text-blue-800' : r.wasteType === 'wet' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${r.wasteType.toUpperCase()}</span>
+                </div>
+                <span class="text-xs font-mono font-bold text-amber-600">+${r.points || 10} PTS</span>
+              </div>
+
+              <!-- Waste Photo -->
+              <div class="w-full h-32 rounded-xl overflow-hidden bg-slate-100 border relative mb-2">
+                <img src="${r.photo}" class="w-full h-full object-cover" />
+                <span class="absolute top-2 left-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded font-bold">
+                  Your Uploaded Photo
+                </span>
+              </div>
+
+              <h4 class="font-bold text-xs text-slate-800">${r.desc || 'Waste dumping spot'}</h4>
+              <p class="text-[10px] text-slate-400 mt-0.5"><i class="fas fa-map-marker-alt text-red-500 mr-1"></i>${r.lat}° N, ${r.lng}° E</p>
+
+              <!-- LIVE DISPATCH OFFICER STATUS / CONTACT BOX -->
+              <div class="mt-3">
+                ${isOpen ? `
+                  <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-center">
+                    <p class="text-xs font-bold text-amber-900 flex items-center justify-center space-x-1.5">
+                      <span class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                      <span>Searching for Sanitation Officer...</span>
+                    </p>
+                    <p class="text-[10px] text-amber-700">Broadcasted to all on-duty officers in your municipal ward.</p>
+                  </div>
+                ` : isAccepted ? `
+                  <div class="p-3 bg-blue-50 border border-blue-200 rounded-2xl space-y-2">
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center space-x-2">
+                        <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
+                          🛵
+                        </div>
+                        <div>
+                          <p class="font-bold text-xs text-blue-950">${r.officerName}</p>
+                          <p class="text-[10px] text-blue-700">${r.officerBadge || 'Badge Verified'} • En Route</p>
+                        </div>
+                      </div>
+                      <span class="bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase">Duty Locked</span>
+                    </div>
+
+                    <!-- Direct Phone Contact Buttons -->
+                    <div class="pt-1 flex items-center space-x-2">
+                      <a href="tel:${r.officerPhone}" class="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-center text-xs shadow flex items-center justify-center space-x-1 transition">
+                        <i class="fas fa-phone-alt text-[10px]"></i>
+                        <span>Call Officer (${r.officerPhone})</span>
+                      </a>
+                      <a href="sms:${r.officerPhone}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-center text-xs transition">
+                        <i class="fas fa-comment"></i>
+                      </a>
+                    </div>
+                  </div>
+                ` : isProofSubmitted ? `
+                  <div class="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl space-y-2">
+                    <p class="font-bold text-xs text-indigo-950 flex items-center">
+                      <i class="fas fa-clock text-indigo-600 mr-1.5"></i> Cleared by ${r.officerName} (Under Review)
+                    </p>
+                    <div class="w-full h-24 rounded-lg overflow-hidden border">
+                      <img src="${r.officerPhoto}" class="w-full h-full object-cover" />
+                    </div>
+                    <p class="text-[10px] text-indigo-700">Awaiting Municipal Admin approval for final dual credit payout.</p>
+                  </div>
+                ` : `
+                  <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1">
+                    <p class="font-bold text-xs text-emerald-950 flex items-center">
+                      <i class="fas fa-check-circle text-emerald-600 mr-1.5"></i> 100% Cleared &amp; Verified!
+                    </p>
+                    <p class="text-[10px] text-emerald-800">Cleaned by ${r.officerName}. <strong>+35 Total Points Credited</strong> to your account!</p>
+                  </div>
+                `}
+              </div>
+
+            </div>
+
+            <!-- View Pin on Map -->
+            <div class="pt-2 border-t text-right">
+              <button onclick="window.switchToMapAndFocus('${r.id}')" class="text-xs font-bold text-emerald-600 hover:underline">
+                View on Live Map ➔
+              </button>
+            </div>
+
+          </div>
+        `;
+      }).join("");
+    }
+
+    // =========================================================================
+    // 5. OFFICER LIVE DISPATCH DISPATCH VIEWS (AVAILABLE POOL VS ACTIVE DUTIES)
+    // =========================================================================
+    function renderOfficerLiveDispatchViews() {
+      // 1. Available Open Pool (Not assigned to anyone yet: status === 'pending')
+      const availableGrid = document.getElementById("off-available-cards-grid");
+      const availableReports = reports.filter(r => r.status === 'pending');
+      
+      document.getElementById("off-available-count-badge").innerText = availableReports.length;
+
+      if (availableGrid) {
+        if (availableReports.length === 0) {
+          availableGrid.innerHTML = `
+            <div class="col-span-3 text-center py-12 bg-white rounded-3xl border border-slate-200 p-8 space-y-2">
+              <span class="text-3xl">🛵</span>
+              <p class="font-bold text-sm text-slate-800">No Open Waste Requests in Pool</p>
+              <p class="text-xs text-slate-400">All current city waste spots have been picked up or cleared!</p>
+            </div>
+          `;
+        } else {
+          availableGrid.innerHTML = availableReports.map(r => `
+            <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 space-y-3 flex flex-col justify-between hover:shadow-md transition">
+              <div>
+                <div class="flex items-center justify-between border-b pb-2 mb-2">
+                  <span class="font-mono font-bold text-xs text-indigo-600">${r.id}</span>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-100 text-amber-800 animate-pulse">
+                    ⚡ Open for Pickup
+                  </span>
+                </div>
+
+                <div class="w-full h-32 rounded-xl overflow-hidden bg-slate-100 border relative mb-2">
+                  <img src="${r.photo}" class="w-full h-full object-cover" />
+                  <span class="absolute top-2 left-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded font-bold">
+                    Citizen Photo
+                  </span>
+                </div>
+
+                <h4 class="font-bold text-xs text-slate-800">${r.desc || 'Waste dumping site'}</h4>
+                <p class="text-[10px] text-slate-500 mt-0.5"><i class="fas fa-map-marker-alt text-red-500 mr-1"></i>${r.lat}° N, ${r.lng}° E</p>
+                <p class="text-[10px] text-slate-500">Citizen: <strong>${r.reporter}</strong> (${r.wasteType.toUpperCase()})</p>
+              </div>
+
+              <!-- Live Dispatch Accept Button -->
+              <div class="pt-2 border-t">
+                <button onclick="window.officerAcceptDuty('${r.id}')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold rounded-xl text-xs shadow-lg flex items-center justify-center space-x-1.5 transition">
+                  <i class="fas fa-motorcycle"></i>
+                  <span>Accept Duty &amp; Lock Task</span>
+                </button>
+              </div>
+            </div>
+          `).join("");
+        }
+      }
+
+      // 2. My Active Assigned Duties (Accepted / Proof In Review)
+      const myDutiesGrid = document.getElementById("off-my-duties-cards-grid");
+      const myActiveDuties = reports.filter(r => 
+        r.status === 'accepted' || r.status === 'proof_submitted'
+      );
+
+      document.getElementById("off-my-duties-count-badge").innerText = myActiveDuties.length;
+
+      if (myDutiesGrid) {
+        if (myActiveDuties.length === 0) {
+          myDutiesGrid.innerHTML = `
+            <div class="col-span-3 text-center py-12 bg-white rounded-3xl border border-slate-200 p-8 space-y-2">
+              <span class="text-3xl">📋</span>
+              <p class="font-bold text-sm text-slate-800">No Active Duties Locked</p>
+              <p class="text-xs text-slate-400">Switch to the "Available Requests Pool" to accept and lock open waste tasks.</p>
+            </div>
+          `;
+        } else {
+          myDutiesGrid.innerHTML = myActiveDuties.map(r => {
+            const isProofSubmitted = r.status === 'proof_submitted';
+
+            return `
+              <div class="bg-white rounded-3xl border ${isProofSubmitted ? 'border-indigo-300' : 'border-blue-400 ring-2 ring-blue-500/20'} shadow-sm p-4 space-y-3 flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center justify-between border-b pb-2 mb-2">
+                    <span class="font-mono font-bold text-xs text-indigo-600">${r.id}</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${isProofSubmitted ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800'}">
+                      ${isProofSubmitted ? 'Proof In Review' : 'Active Duty'}
+                    </span>
+                  </div>
+
+                  <div class="w-full h-32 rounded-xl overflow-hidden bg-slate-100 border relative mb-2">
+                    <img src="${r.photo}" class="w-full h-full object-cover" />
+                    <span class="absolute top-2 left-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded font-bold">
+                      Citizen Spot
+                    </span>
+                  </div>
+
+                  <h4 class="font-bold text-xs text-slate-800">${r.desc || 'Waste dumping site'}</h4>
+                  <p class="text-[10px] text-slate-500 mt-0.5"><i class="fas fa-map-marker-alt text-red-500 mr-1"></i>${r.lat}° N, ${r.lng}° E</p>
+                  <p class="text-[10px] text-slate-500">Citizen: <strong>${r.reporter}</strong></p>
+
+                  ${isProofSubmitted ? `
+                    <div class="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-xl space-y-1">
+                      <p class="text-[10px] font-bold text-indigo-900">✔ Proof Submitted to Admin</p>
+                      <img src="${r.officerPhoto}" class="w-full h-20 object-cover rounded-lg border border-indigo-200" />
+                    </div>
+                  ` : ''}
+                </div>
+
+                <!-- Action Button -->
+                <div class="pt-2 border-t">
+                  ${!isProofSubmitted ? `
+                    <button onclick="window.openOfficerProofModal('${r.id}')" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold rounded-xl text-xs shadow-lg flex items-center justify-center space-x-1.5 transition cursor-pointer">
+                      <i class="fas fa-camera"></i>
+                      <span>Upload Clearance Proof (+50 Credits)</span>
+                    </button>
+                  ` : `
+                    <button disabled class="w-full py-2 bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center justify-center space-x-1 cursor-not-allowed">
+                      <i class="fas fa-hourglass-half"></i>
+                      <span>Awaiting Admin Verification</span>
+                    </button>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+      }
+
+      // 3. Completed Clearances
+      const completedGrid = document.getElementById("off-completed-cards-grid");
+      const completedReports = reports.filter(r => r.status === 'collected');
+
+      if (completedGrid) {
+        if (completedReports.length === 0) {
+          completedGrid.innerHTML = `
+            <div class="col-span-3 text-center py-12 bg-white rounded-3xl border border-slate-200 p-8 space-y-2">
+              <span class="text-3xl">🏆</span>
+              <p class="font-bold text-sm text-slate-800">No Resolved Clearances Yet</p>
+              <p class="text-xs text-slate-400">Complete tasks and receive admin approval to see your clearance history.</p>
+            </div>
+          `;
+        } else {
+          completedGrid.innerHTML = completedReports.map(r => `
+            <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 space-y-3">
+              <div class="flex items-center justify-between border-b pb-2 mb-2">
+                <span class="font-mono font-bold text-xs text-slate-800">${r.id}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">✔ Cleared</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <img src="${r.photo}" class="w-full h-20 object-cover rounded-lg border" />
+                <img src="${r.officerPhoto || r.photo}" class="w-full h-20 object-cover rounded-lg border" />
+              </div>
+              <p class="font-bold text-xs text-slate-800">${r.desc || 'Waste site'}</p>
+              <div class="p-2 bg-emerald-50 text-emerald-900 rounded-xl text-[10px] font-mono font-bold flex items-center justify-between">
+                <span>Reward Earned:</span>
+                <span>+50 CREDITS</span>
+              </div>
+            </div>
+          `).join("");
+        }
+      }
+    }
+
+    // =========================================================================
+    // 6. LIVE DISPATCH ACTION: OFFICER ACCEPTS & LOCKS DUTY
+    // =========================================================================
+    window.officerAcceptDuty = function(id) {
+      const r = reports.find(x => x.id === id);
+      if (!r) return;
+
+      // Check if already taken by someone else
+      if (r.status !== 'pending') {
+        showToast("Task Already Locked", "This waste task has already been accepted by another officer.", "info");
+        renderUI();
+        return;
+      }
+
+      // Lock task to current officer
+      r.status = "accepted";
+      r.officerId = currentUser.officerId || "VMC-OFF-104";
+      r.officerName = currentUser.name || "Sanitation Field Officer";
+      r.officerPhone = currentUser.phone || "+91 98480 44554";
+      r.officerBadge = currentUser.badge || "AP-VMC-SWM-104";
+
+      // 1. Instant local persistence & UI update (0ms wait)
+      localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+      renderUI();
+      syncServerData(true);
+
+      // 2. Auto-switch to "My Active Duties" tab in officer portal
+      const btnDuties = document.getElementById("off-subtab-my-duties");
+      if (btnDuties) btnDuties.click();
+
+      if (window.confetti) {
+        window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 } });
+      }
+
+      showToast("Duty Accepted & Locked! 🛵", `Spot ${r.id} locked to you. Removed from other officers' queues. Your phone number is now shared with ${r.reporter}.`, "success");
+
+      // 3. Broadcast to all open tabs so the spot is instantly removed from open pool
+      if (globalDispatchChannel) {
+        try {
+          globalDispatchChannel.postMessage({ type: 'DUTY_ACCEPTED', reportId: r.id, officerName: r.officerName });
+        } catch(e) {}
+      }
+
+      // 4. Non-blocking Firestore sync in background
+      if (db && r.fbDocId) {
+        import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js").then(({ doc, updateDoc }) => {
+          updateDoc(doc(db, "reports", r.fbDocId), {
+            status: r.status,
+            officerId: r.officerId,
+            officerName: r.officerName,
+            officerPhone: r.officerPhone,
+            officerBadge: r.officerBadge
+          }).catch(console.warn);
+        }).catch(console.warn);
+      }
+    };
+
+    // Render Admin Officer Access Requests
+    function renderAdminOfficerRequests() {
+      const container = document.getElementById("admin-officer-requests-container");
+      if (!container) return;
+
+      const pendingOfficers = officers.filter(o => o.status === 'pending');
+      const approvedOfficers = officers.filter(o => o.status === 'approved');
+
+      document.getElementById("admin-officer-req-badge").innerText = `${pendingOfficers.length} Pending Approval`;
+
+      let html = '';
+
+      if (pendingOfficers.length > 0) {
+        html += `
+          <div class="space-y-2 mb-4">
+            <p class="text-[11px] font-bold text-amber-800 uppercase tracking-wider">⏳ Pending Officer Applications (Action Required to Permit Login)</p>
+            ${pendingOfficers.map(o => `
+              <div class="p-3 bg-amber-50/80 border border-amber-300 rounded-2xl flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div class="w-9 h-9 rounded-xl bg-amber-500 text-white font-bold flex items-center justify-center text-xs">
+                    🛡️
+                  </div>
+                  <div>
+                    <div class="flex items-center space-x-2">
+                      <strong class="text-xs text-slate-900">${o.name}</strong>
+                      <span class="font-mono text-[10px] bg-amber-200/80 text-amber-900 px-2 py-0.2 rounded font-bold">${o.id}</span>
+                      <span class="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">KYC: ${o.badge || 'Verified'}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-600">${o.ward} • Tel: ${o.phone}</p>
+                  </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <button onclick="window.approveOfficerRequest('${o.id}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition flex items-center space-x-1">
+                    <i class="fas fa-check"></i>
+                    <span>Accept &amp; Authorize Login</span>
+                  </button>
+                  <button onclick="window.rejectOfficerRequest('${o.id}')" class="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs rounded-xl transition">
+                    Reject
+                  </button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs mb-3 flex items-center space-x-2">
+            <i class="fas fa-check-circle text-emerald-600"></i>
+            <span>All officer applications reviewed. No pending requests awaiting approval.</span>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+    }
+
+    // Render Admin Citizen Management & Ban Controls
+    function renderAdminCitizenManagement() {
+      const container = document.getElementById("admin-citizen-roster");
+      if (!container) return;
+
+      if (citizens.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-4 space-y-1">
+            <span class="text-2xl">👤</span>
+            <p class="font-bold text-xs text-slate-700">No Citizens Registered Yet</p>
+            <p class="text-[10px] text-slate-400">Citizens who complete KYC registration will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = citizens.map((c, i) => {
+        const isBanned = c.status === 'banned';
+        const pts = reports.filter(r => r.reporterUsername === c.username || r.reporter === c.name).reduce((acc, curr) => acc + (curr.points || 10), 0);
+        return `
+          <div class="p-3 bg-slate-50 border ${isBanned ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200'} rounded-2xl flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-full ${isBanned ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'} flex items-center justify-center font-bold text-xs">
+                ${isBanned ? '🚫' : '👤'}
+              </div>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <strong class="text-xs ${isBanned ? 'text-rose-900 line-through' : 'text-slate-800'}">${c.name}</strong>
+                  <span class="font-mono text-[10px] text-slate-500">@${c.username}</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.2 rounded ${isBanned ? 'bg-rose-600 text-white' : 'bg-emerald-100 text-emerald-800'}">
+                    ${isBanned ? 'BANNED FOR FAKE REPORTS' : 'KYC VERIFIED'}
+                  </span>
+                  <span class="text-[10px] font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                    ${pts} PTS
+                  </span>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-0.5">ID: ${c.idType} (${c.idNo}) • Tel: ${c.phone}</p>
+              </div>
+            </div>
+
+            <div>
+              ${isBanned ? `
+                <button onclick="window.toggleBanCitizen('${c.username}')" class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[11px] rounded-lg transition">
+                  Unban Citizen
+                </button>
+              ` : `
+                <button onclick="window.toggleBanCitizen('${c.username}')" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-[11px] rounded-lg transition">
+                  <i class="fas fa-ban mr-1"></i> Ban for Fake Reports
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // Render Admin Officer Management & Ban Controls
+    function renderAdminOfficerManagement() {
+      const container = document.getElementById("admin-officer-roster");
+      if (!container) return;
+
+      if (officers.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-4 space-y-1">
+            <span class="text-2xl">🛡️</span>
+            <p class="font-bold text-xs text-slate-700">No Field Officers Registered Yet</p>
+            <p class="text-[10px] text-slate-400">Sanitation officers who register with their service badge will appear here for Admin authorization.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = officers.map((o, i) => {
+        const isBanned = o.status === 'banned';
+        const isPending = o.status === 'pending';
+        const creds = reports.filter(r => (r.officerId === o.id || r.officerName === o.name) && r.status === 'collected').reduce((acc, curr) => acc + (curr.officerCredits || 50), 0);
+        return `
+          <div class="p-3 bg-slate-50 border ${isBanned ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200'} rounded-2xl flex items-center justify-between">
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-full ${isBanned ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'} flex items-center justify-center font-bold text-xs">
+                ${isBanned ? '🚫' : '🛡️'}
+              </div>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <strong class="text-xs ${isBanned ? 'text-rose-900 line-through' : 'text-slate-800'}">${o.name}</strong>
+                  <span class="font-mono text-[10px] text-indigo-600 font-bold">${o.id}</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.2 rounded ${isBanned ? 'bg-rose-600 text-white' : isPending ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}">
+                    ${isBanned ? 'SUSPENDED' : isPending ? 'PENDING' : 'AUTHORIZED'}
+                  </span>
+                  <span class="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                    ${creds} CREDITS
+                  </span>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-0.5">${o.ward} • Badge: ${o.badge || 'Govt Verified'} • Tel: ${o.phone}</p>
+              </div>
+            </div>
+
+            <div>
+              ${isBanned ? `
+                <button onclick="window.toggleBanOfficer('${o.id}')" class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[11px] rounded-lg transition">
+                  Restore Access
+                </button>
+              ` : `
+                <button onclick="window.toggleBanOfficer('${o.id}')" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-[11px] rounded-lg transition">
+                  <i class="fas fa-ban mr-1"></i> Suspend Officer
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // Render Admin Verification Before/After Grid
+    function renderAdminVerification() {
+      const grid = document.getElementById("admin-verification-grid");
+      if (!grid) return;
+
+      const inReviewReports = reports.filter(r => r.status === 'proof_submitted');
+      document.getElementById("admin-pending-review-count").innerText = inReviewReports.length;
+
+      if (reports.length === 0) {
+        grid.innerHTML = `<p class="col-span-2 text-center text-slate-400 py-10">No incident reports available.</p>`;
+        return;
+      }
+
+      // Prioritize proof_submitted items at the top of the admin review queue
+      const sortedReports = [...reports].sort((a, b) => {
+        const order = { 'proof_submitted': 1, 'accepted': 2, 'pending': 3, 'collected': 4 };
+        return (order[a.status] || 99) - (order[b.status] || 99);
+      });
+
+      grid.innerHTML = sortedReports.map(r => {
+        const isResolved = r.status === 'collected';
+        const isProofSubmitted = r.status === 'proof_submitted';
+        const isAccepted = r.status === 'accepted';
+
+        return `
+          <div class="bg-slate-50 rounded-2xl border ${isProofSubmitted ? 'border-indigo-300 ring-2 ring-indigo-400/20' : 'border-slate-200'} p-4 flex flex-col justify-between space-y-4">
+            
+            <div>
+              <div class="flex items-center justify-between border-b pb-2 mb-3">
+                <div class="flex items-center space-x-2">
+                  <span class="font-mono font-bold text-xs bg-slate-200 px-2 py-0.5 rounded">${r.id}</span>
+                  <span class="font-bold text-xs text-slate-800 truncate">${r.desc || 'Waste site'}</span>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${isResolved ? 'bg-emerald-100 text-emerald-800' : isProofSubmitted ? 'bg-indigo-600 text-white animate-pulse' : isAccepted ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}">
+                  ${isProofSubmitted ? '★ Ready for Review' : isAccepted ? '🛵 Duty Locked' : r.status.replace('_', ' ')}
+                </span>
+              </div>
+
+              <!-- Side-by-Side Before vs After Photographic Evidence -->
+              <div class="grid grid-cols-2 gap-3 mb-3">
+                <!-- BEFORE (Citizen) -->
+                <div>
+                  <p class="text-[10px] font-bold text-rose-700 uppercase mb-1 flex items-center">
+                    <span class="w-2 h-2 rounded-full bg-rose-500 mr-1"></span> Before (Citizen Report)
+                  </p>
+                  <div class="w-full h-28 rounded-xl overflow-hidden border border-slate-300 bg-slate-200">
+                    <img src="${r.photo}" class="w-full h-full object-cover" />
+                  </div>
+                  <p class="text-[10px] text-slate-500 mt-1">Reporter: <strong>${r.reporter}</strong></p>
+                </div>
+
+                <!-- AFTER (Officer Clearance Proof) -->
+                <div>
+                  <p class="text-[10px] font-bold text-emerald-700 uppercase mb-1 flex items-center">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1"></span> After (Officer Proof)
+                  </p>
+                  <div class="w-full h-28 rounded-xl overflow-hidden border border-slate-300 bg-slate-200 flex items-center justify-center">
+                    ${r.officerPhoto ? `
+                      <img src="${r.officerPhoto}" class="w-full h-full object-cover" />
+                    ` : `
+                      <div class="text-center p-2 text-slate-400">
+                        <i class="fas fa-clock text-base mb-1"></i>
+                        <p class="text-[9px]">${isAccepted ? 'Officer En Route clearing spot' : 'Awaiting Officer Pickup'}</p>
+                      </div>
+                    `}
+                  </div>
+                  <p class="text-[10px] text-slate-500 mt-1">Officer: <strong>${r.officerName || 'Not Assigned'}</strong> (${r.officerPhone || 'N/A'})</p>
+                </div>
+              </div>
+
+              <!-- Officer Field Action Notes -->
+              ${r.officerNote ? `
+                <div class="p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-xl text-[11px] text-indigo-900 mb-2">
+                  <strong class="font-bold">Sanitation Notes:</strong> ${r.officerNote}
+                </div>
+              ` : ''}
+
+              <!-- Dual Credit Breakdown Info -->
+              <div class="p-2 bg-slate-100 rounded-xl flex items-center justify-between text-[10px] text-slate-600 font-mono">
+                <span>Citizen Reward: <strong class="text-emerald-700">+25 Pts</strong></span>
+                <span>Officer Reward: <strong class="text-indigo-700">+50 Credits</strong></span>
+              </div>
+            </div>
+
+            <!-- Admin Resolution Action -->
+            <div class="pt-2 border-t">
+              ${isProofSubmitted ? `
+                <button onclick="window.adminResolveSpot('${r.id}')" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl text-xs shadow-lg flex items-center justify-center space-x-2 transition cursor-pointer">
+                  <i class="fas fa-check-double text-emerald-200"></i>
+                  <span>Approve Clearance Proof &amp; Disburse Credits (+25 / +50)</span>
+                </button>
+              ` : isResolved ? `
+                <div class="w-full py-2 bg-emerald-100 text-emerald-900 font-bold rounded-xl text-xs text-center flex items-center justify-center space-x-1">
+                  <i class="fas fa-check-circle text-emerald-600"></i>
+                  <span>Resolved • Closed &amp; Credits Disbursed</span>
+                </div>
+              ` : `
+                <button onclick="window.adminResolveSpot('${r.id}')" class="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-bold rounded-xl text-xs shadow flex items-center justify-center space-x-2 transition cursor-pointer">
+                  <i class="fas fa-check"></i>
+                  <span>Approve &amp; Mark Cleared Directly</span>
+                </button>
+              `}
+            </div>
+
+          </div>
+        `;
+      }).join("");
+    }
+
+    // Officer Proof Upload Action
+    window.openOfficerProofModal = function(id) {
+      activeSpotForProof = id;
+      const r = reports.find(x => x.id === id);
+      document.getElementById("proof-modal-spot-id").innerText = `Resolving Spot #${id} (${r ? r.desc : ''})`;
+      
+      document.getElementById("proof-officer-id").value = currentUser.officerId || "VMC-OFF-104";
+      document.getElementById("proof-officer-name").value = currentUser.name || "Sanitation Field Officer";
+
+      // Require user to explicitly capture or pick a clearance photo
+      currentOfficerProofPhoto = null;
+      const preview = document.getElementById("proof-photo-preview");
+      if (preview) {
+        preview.src = "";
+        preview.classList.add("hidden");
+      }
+      const hint = document.getElementById("proof-photo-hint");
+      if (hint) hint.classList.remove("hidden");
+      const box = document.getElementById("proof-photo-box");
+      if (box) box.className = "border-2 border-dashed border-emerald-500 bg-emerald-50/40 rounded-xl p-4 text-center cursor-pointer transition relative overflow-hidden";
+      const errEl = document.getElementById("proof-photo-required-err");
+      if (errEl) errEl.classList.add("hidden");
+
+      document.getElementById("officer-proof-modal").classList.remove("hidden");
+    };
+
+    // Admin Approve & Ban Handlers
+    window.approveOfficerRequest = function(id) {
+      const o = officers.find(x => x.id === id || (x.username && x.username.toLowerCase() === id.toLowerCase()));
+      if (!o) return;
+      o.status = "approved";
+      localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+      renderUI();
+      syncServerData(true);
+      if (window.confetti) {
+        window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 } });
+      }
+      showToast("Officer Authorized! 🛡️", `${o.name} (${o.id}) approved! They can now log in and take active duties.`, "success");
+    };
+
+    window.rejectOfficerRequest = function(id) {
+      officers = officers.filter(x => x.id !== id);
+      localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+      renderUI();
+      syncServerData(true);
+      showToast("Request Rejected", `Officer application ${id} removed.`, "info");
+    };
+
+    // Admin Toggle Ban on Citizen
+    window.toggleBanCitizen = function(username) {
+      const c = citizens.find(x => x.username === username);
+      if (!c) return;
+
+      if (c.status === "banned") {
+        c.status = "active";
+        showToast("Citizen Unbanned", `${c.name} (@${c.username}) restored to active standing.`, "info");
+      } else {
+        c.status = "banned";
+        showToast("Citizen Banned for Fake Reports 🚫", `${c.name} (@${c.username}) blocked from portal.`, "error");
+      }
+
+      localStorage.setItem("greenpulse_citizens_clean_v8", JSON.stringify(citizens));
+      renderUI();
+      syncServerData(true);
+    };
+
+    // Admin Toggle Ban on Officer
+    window.toggleBanOfficer = function(id) {
+      const o = officers.find(x => x.id === id);
+      if (!o) return;
+
+      if (o.status === "banned") {
+        o.status = "approved";
+        showToast("Officer Restored", `${o.name} (${o.id}) restored to active duty.`, "info");
+      } else {
+        o.status = "banned";
+        showToast("Officer Suspended 🚫", `${o.name} (${o.id}) suspended from duty.`, "error");
+      }
+
+      localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+      renderUI();
+      syncServerData(true);
+    };
+
+    // Admin Approve & Resolve Action (Dual Credit Disbursement)
+    window.adminResolveSpot = function(id) {
+      const r = reports.find(x => x.id === id);
+      if (!r) return;
+
+      r.status = "collected";
+      r.points = (r.points || 10) + 25; // +25 to citizen
+      r.officerCredits = (r.officerCredits || 0) + 50; // +50 to officer
+      if (!r.officerPhoto) {
+        r.officerPhoto = PRESETS.clean_street;
+      }
+      if (!r.officerName) {
+        r.officerName = "Sanitation Municipal Crew";
+      }
+
+      // 1. Instant local persistence & UI update (0ms wait)
+      localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+      renderUI();
+      syncServerData(true);
+
+      if (window.confetti) {
+        window.confetti({ particleCount: 160, spread: 90, origin: { y: 0.5 }, colors: ['#10b981', '#059669', '#34d399', '#f59e0b', '#6366f1'] });
+      }
+
+      showToast("Clearance Approved & Resolved! 👑", `Spot ${r.id} closed. +25 Pts awarded to ${r.reporter}, +50 Credits to ${r.officerName}!`, "success");
+
+      // 2. Broadcast resolution
+      if (globalDispatchChannel) {
+        try {
+          globalDispatchChannel.postMessage({ type: 'RESOLVED', report: r });
+        } catch(e) {}
+      }
+
+      // 3. Non-blocking Firestore sync
+      if (db && r.fbDocId) {
+        import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js").then(({ doc, updateDoc }) => {
+          updateDoc(doc(db, "reports", r.fbDocId), {
+            status: r.status,
+            points: r.points,
+            officerCredits: r.officerCredits,
+            officerPhoto: r.officerPhoto,
+            officerName: r.officerName
+          }).catch(console.warn);
+        }).catch(console.warn);
+      }
+    };
+
+    window.focusPin = function(id) {
+      const r = reports.find(x => x.id === id);
+      if (r && map) {
+        map.flyTo([r.lat, r.lng], 15);
+        if (markers[id]) markers[id].openPopup();
+      }
+    };
+
+    window.switchToMapAndFocus = function(id) {
+      const subtabMap = document.getElementById("cit-subtab-map");
+      if (subtabMap) subtabMap.click();
+      setTimeout(() => window.focusPin(id), 250);
+    };
+
+    // 1-Tap Quick Demo Access
+    window.quickDemoLogin = function(role) {
+      if (role === 'citizen') {
+        let cit = citizens.find(c => c.username === 'lakshmi_v');
+        if (!cit) {
+          cit = { username: 'lakshmi_v', name: 'Lakshmi Narayana', phone: '+91 98480 22334', passkey: '1234', status: 'active', kycStatus: 'verified' };
+          citizens.unshift(cit);
+          localStorage.setItem('greenpulse_citizens_clean_v8', JSON.stringify(citizens));
+        }
+        currentUser = { role: 'citizen', username: cit.username, name: cit.name, officerId: null, phone: cit.phone };
+        document.getElementById("auth-screen").classList.add("hidden");
+        document.getElementById("main-app-container").classList.remove("hidden");
+        setAppView("citizen");
+        showToast("Logged in as Citizen 🌿", "Citizen portal active. Geotag and broadcast waste spots!", "success");
+      } else if (role === 'officer') {
+        let off = officers.find(o => o.id === 'VMC-OFF-104');
+        if (!off) {
+          off = { id: 'VMC-OFF-104', username: 'ramesh_officer', name: 'Insp. Ramesh Naidu', ward: 'Ward 14 (Benz Circle)', phone: '+91 98480 44554', badge: 'AP-VMC-SWM-104', passkey: '1234', pin: '1234', status: 'approved', kycStatus: 'verified' };
+          officers.unshift(off);
+          localStorage.setItem('greenpulse_officers_clean_v8', JSON.stringify(officers));
+        }
+        currentUser = { role: 'officer', username: off.username, name: off.name, officerId: off.id, phone: off.phone, badge: off.badge };
+        document.getElementById("auth-screen").classList.add("hidden");
+        document.getElementById("main-app-container").classList.remove("hidden");
+        setAppView("officer");
+        showToast("Logged in as Field Officer 🛡️", "Officer Live Dispatch portal active. Accept duties and upload clearance proofs!", "success");
+      } else if (role === 'admin') {
+        currentUser = { role: 'admin', username: 'admin_vmc', name: 'Municipal Admin (VMC)', officerId: null, phone: '' };
+        document.getElementById("auth-screen").classList.add("hidden");
+        document.getElementById("main-app-container").classList.remove("hidden");
+        setAppView("admin");
+        showToast("Logged in as Municipal Admin 👑", "Admin Command Center active. Review before/after clearance proofs and disburse credits!", "success");
+      }
+    };
+
+    // View Router Function (Only called after login)
+    function setAppView(viewName) {
+      const vCit = document.getElementById("view-citizen");
+      const vOff = document.getElementById("view-officer");
+      const vAdm = document.getElementById("view-admin");
+
+      vCit.classList.add("hidden");
+      vOff.classList.add("hidden");
+      vAdm.classList.add("hidden");
+
+      if (viewName === "citizen") {
+        vCit.classList.remove("hidden");
+        const elRep = document.getElementById("input-reporter");
+        if (elRep) elRep.value = currentUser.name || "Citizen Volunteer";
+        
+        if (!currentPhoto) {
+          currentPhoto = PRESETS.dry;
+          const preview = document.getElementById("photo-preview");
+          if (preview) {
+            preview.src = currentPhoto;
+            preview.classList.remove("hidden");
+          }
+          const hint = document.getElementById("photo-hint");
+          if (hint) hint.classList.add("hidden");
+          const box = document.getElementById("photo-box");
+          if (box) box.className = "border-2 border-emerald-500 bg-emerald-50/40 rounded-xl p-3 text-center cursor-pointer transition relative overflow-hidden";
+        }
+
+        const citTabMap = document.getElementById("cit-subtab-map");
+        if (citTabMap) citTabMap.click();
+        initMap();
+      } else if (viewName === "officer") {
+        vOff.classList.remove("hidden");
+        document.getElementById("officer-welcome-header").innerText = `Sanitation Clearance & Task Lock — ${currentUser.name} (${currentUser.officerId || 'VMC-OFF'})`;
+        const offTabAvail = document.getElementById("off-subtab-available");
+        if (offTabAvail) offTabAvail.click();
+      } else if (viewName === "admin") {
+        vAdm.classList.remove("hidden");
+      }
+
+      renderUI();
+    }
+
+    // GPS Auto-Capture
+    function autoDetectGPS() {
+      const badge = document.getElementById("gps-badge");
+      badge.className = "px-2 py-0.5 text-[9px] font-bold rounded-full bg-amber-100 text-amber-800";
+      badge.innerText = "Detecting...";
+
+      if (!navigator.geolocation) {
+        updateGPSUI(currentCoords.lat, currentCoords.lng, "Default Location");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          currentCoords = {
+            lat: Number(pos.coords.latitude.toFixed(5)),
+            lng: Number(pos.coords.longitude.toFixed(5))
+          };
+          updateGPSUI(currentCoords.lat, currentCoords.lng, "GPS Locked");
+          if (map) map.flyTo([currentCoords.lat, currentCoords.lng], 15);
+        },
+        err => {
+          updateGPSUI(currentCoords.lat, currentCoords.lng, "Manual Pin");
+        },
+        { timeout: 7000, enableHighAccuracy: true }
+      );
+    }
+
+    function updateGPSUI(lat, lng, statusText) {
+      document.getElementById("gps-display").innerText = `${lat}° N, ${lng}° E`;
+      const badge = document.getElementById("gps-badge");
+      badge.className = "px-2 py-0.5 text-[9px] font-bold rounded-full bg-emerald-100 text-emerald-800";
+      badge.innerText = statusText;
+    }
+
+    // Photo File Upload & Canvas Compression Setup
+    function setupPhotoUploads() {
+      // Citizen Photo
+      const box = document.getElementById("photo-box");
+      const input = document.getElementById("photo-input");
+      const preview = document.getElementById("photo-preview");
+      const hint = document.getElementById("photo-hint");
+      const errEl = document.getElementById("photo-required-err");
+
+      // Initial state: require citizen to explicitly provide photo
+      if (!currentPhoto) {
+        preview.classList.add("hidden");
+        hint.classList.remove("hidden");
+      }
+
+      box.onclick = () => input.click();
+      input.onchange = function(e) {
+        if (e.target.files && e.target.files[0]) {
+          compressFileToDataUrl(e.target.files[0], (dataUrl) => {
+            currentPhoto = dataUrl;
+            preview.src = currentPhoto;
+            preview.classList.remove("hidden");
+            hint.classList.add("hidden");
+            box.className = "border-2 border-emerald-500 bg-emerald-50/40 rounded-xl p-3 text-center cursor-pointer transition relative overflow-hidden";
+            if (errEl) errEl.classList.add("hidden");
+          });
+        }
+      };
+
+      document.querySelectorAll(".preset-btn").forEach(btn => {
+        btn.onclick = function() {
+          const type = this.getAttribute("data-type");
+          currentPhoto = PRESETS[type] || PRESETS.dry;
+          preview.src = currentPhoto;
+          preview.classList.remove("hidden");
+          hint.classList.add("hidden");
+          box.className = "border-2 border-emerald-500 bg-emerald-50/40 rounded-xl p-3 text-center cursor-pointer transition relative overflow-hidden";
+          if (errEl) errEl.classList.add("hidden");
+          document.getElementById("waste-type-select").value = type;
+        };
+      });
+
+      // Officer Proof Photo
+      const proofBox = document.getElementById("proof-photo-box");
+      const proofInput = document.getElementById("proof-file-input");
+      const proofPreview = document.getElementById("proof-photo-preview");
+      const proofHint = document.getElementById("proof-photo-hint");
+      const proofErrEl = document.getElementById("proof-photo-required-err");
+
+      proofBox.onclick = () => proofInput.click();
+      proofInput.onchange = function(e) {
+        if (e.target.files && e.target.files[0]) {
+          compressFileToDataUrl(e.target.files[0], (dataUrl) => {
+            currentOfficerProofPhoto = dataUrl;
+            proofPreview.src = currentOfficerProofPhoto;
+            proofPreview.classList.remove("hidden");
+            proofHint.classList.add("hidden");
+            proofBox.className = "border-2 border-emerald-500 bg-emerald-50/40 rounded-xl p-4 text-center cursor-pointer transition relative overflow-hidden";
+            if (proofErrEl) proofErrEl.classList.add("hidden");
+          });
+        }
+      };
+
+      document.querySelectorAll(".preset-clean-btn").forEach(btn => {
+        btn.onclick = function() {
+          const style = this.getAttribute("data-style");
+          currentOfficerProofPhoto = PRESETS[style] || PRESETS.clean_street;
+          proofPreview.src = currentOfficerProofPhoto;
+          proofPreview.classList.remove("hidden");
+          proofHint.classList.add("hidden");
+          proofBox.className = "border-2 border-emerald-500 bg-emerald-50/40 rounded-xl p-4 text-center cursor-pointer transition relative overflow-hidden";
+          if (proofErrEl) proofErrEl.classList.add("hidden");
+        };
+      });
+    }
+
+    function compressFileToDataUrl(file, callback) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement("canvas");
+          let w = img.width, h = img.height;
+          if (w > 800) { h = Math.round((h * 800) / w); w = 800; }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          callback(canvas.toDataURL("image/jpeg", 0.82));
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Firebase Connection
+    async function initFirebase(config) {
+      try {
+        const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js");
+        const { getFirestore, collection, addDoc, onSnapshot, query } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+
+        const app = initializeApp(config);
+        db = getFirestore(app);
+
+        const q = query(collection(db, "reports"));
+        if (unsubscribeFirestore) unsubscribeFirestore();
+
+        unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+          if (!snapshot.empty) {
+            const fbReports = [];
+            snapshot.forEach(doc => {
+              fbReports.push({ id: doc.id, fbDocId: doc.id, ...doc.data() });
+            });
+            reports = fbReports;
+            localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+            renderUI();
+          }
+        });
+
+        document.getElementById("firebase-dot").className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+        localStorage.setItem("greenpulse_fb_config", JSON.stringify(config));
+        showToast("Firebase Connected", "Real-time Firestore sync active.", "success");
+      } catch (err) {
+        console.warn("Firebase connect error:", err);
+      }
+    }
+
+    const savedConfig = JSON.parse(localStorage.getItem("greenpulse_fb_config"));
+    if (savedConfig && savedConfig.apiKey && savedConfig.projectId) {
+      initFirebase(savedConfig);
+    }
+
+    // Toast helper
+    function showToast(title, body, type = "success") {
+      const toast = document.getElementById("toast");
+      const icon = document.getElementById("toast-icon");
+      document.getElementById("toast-title").innerText = title;
+      document.getElementById("toast-body").innerText = body;
+
+      toast.className = `fixed bottom-6 right-4 max-w-sm z-[999999] p-4 rounded-2xl shadow-2xl text-white font-semibold text-xs flex items-start space-x-3 transition-all duration-300 transform translate-y-0 opacity-100 ${
+        type === 'success' ? 'bg-emerald-900 border border-emerald-500' : type === 'error' ? 'bg-rose-950 border border-rose-600' : 'bg-slate-900 border border-slate-700'
+      }`;
+      icon.innerHTML = type === 'success' ? '✔' : type === 'error' ? '🚫' : 'ℹ';
+
+      setTimeout(() => {
+        toast.classList.add("translate-y-24", "opacity-0");
+      }, 4000);
+    }
+
+    // CSV Export Function
+    function exportCSV() {
+      const headers = ["ID", "WasteType", "Status", "Reporter", "ReporterUsername", "CitizenPoints", "OfficerID", "OfficerName", "OfficerPhone", "OfficerBadge", "OfficerCredits", "Latitude", "Longitude", "Timestamp"];
+      const rows = reports.map(r => [
+        r.id, r.wasteType, r.status, r.reporter, r.reporterUsername || '', r.points || 10, r.officerId || '', r.officerName || '', r.officerPhone || '', r.officerBadge || '', r.officerCredits || 0, r.lat, r.lng, r.timestamp
+      ]);
+      const csv = [headers.join(','), ...rows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `greenpulse_swm_report_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("CSV Exported", "Municipal solid waste log downloaded.", "info");
+    }
+
+    // =========================================================================
+    // MULTI-DEVICE CLOUD & SERVER LIVE SYNCHRONIZATION ENGINE
+    // =========================================================================
+    async function syncServerData(pushData = false) {
+      try {
+        if (pushData) {
+          await fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reports, citizens, officers, updatedAt: new Date().toISOString() })
+          });
+        } else {
+          const res = await fetch('/api/data');
+          if (res.ok) {
+            const data = await res.json();
+            let changed = false;
+            if (data && data.reports && Array.isArray(data.reports)) {
+              if (JSON.stringify(data.reports) !== JSON.stringify(reports)) {
+                reports = data.reports;
+                localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+                changed = true;
+              }
+            }
+            if (data && data.citizens && Array.isArray(data.citizens)) {
+              if (JSON.stringify(data.citizens) !== JSON.stringify(citizens)) {
+                citizens = data.citizens;
+                localStorage.setItem("greenpulse_citizens_clean_v8", JSON.stringify(citizens));
+                changed = true;
+              }
+            }
+            if (data && data.officers && Array.isArray(data.officers)) {
+              if (JSON.stringify(data.officers) !== JSON.stringify(officers)) {
+                officers = data.officers;
+                localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+                changed = true;
+              }
+            }
+            if (changed) {
+              renderUI();
+            }
+          }
+        }
+      } catch (err) {
+        // Offline fallback
+      }
+    }
+
+    // Initial cloud fetch on startup + 2.5s real-time multi-device sync loop
+    syncServerData(false);
+    setInterval(() => syncServerData(false), 2500);
+
+    // DOM Setup & Event Listeners
+    function initApp() {
+      autoDetectGPS();
+      setupPhotoUploads();
+
+      const btnReGPS = document.getElementById("btn-re-gps");
+      if (btnReGPS) btnReGPS.onclick = autoDetectGPS;
+
+      // Switch Role Button (Opens Auth Screen & Hides App)
+      const btnSwitchRole = document.getElementById("btn-switch-role");
+      if (btnSwitchRole) {
+        btnSwitchRole.onclick = () => {
+          document.getElementById("main-app-container").classList.add("hidden");
+          document.getElementById("auth-screen").classList.remove("hidden");
+        };
+      }
+
+      // Citizen Sub-Tabs Switching
+      const citTabMap = document.getElementById("cit-subtab-map");
+      const citTabRaised = document.getElementById("cit-subtab-raised");
+      const citViewMap = document.getElementById("cit-view-map-container");
+      const citViewRaised = document.getElementById("cit-view-raised-container");
+
+      citTabMap.onclick = () => {
+        citTabMap.className = "px-4 py-2 rounded-xl bg-emerald-600 text-white shadow transition flex items-center space-x-1.5";
+        citTabRaised.className = "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1.5";
+        citViewMap.classList.remove("hidden");
+        citViewRaised.classList.add("hidden");
+        if (map) map.invalidateSize();
+      };
+
+      citTabRaised.onclick = () => {
+        citTabRaised.className = "px-4 py-2 rounded-xl bg-emerald-600 text-white shadow transition flex items-center space-x-1.5";
+        citTabMap.className = "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1.5";
+        citViewRaised.classList.remove("hidden");
+        citViewMap.classList.add("hidden");
+        renderCitizenRaisedIssues();
+      };
+
+      // Officer Sub-Tabs Switching
+      const offTabAvailable = document.getElementById("off-subtab-available");
+      const offTabDuties = document.getElementById("off-subtab-my-duties");
+      const offTabCompleted = document.getElementById("off-subtab-completed");
+
+      const offViewAvailable = document.getElementById("off-view-available-container");
+      const offViewDuties = document.getElementById("off-view-my-duties-container");
+      const offViewCompleted = document.getElementById("off-view-completed-container");
+
+      function setOfficerSubTab(tab) {
+        [offTabAvailable, offTabDuties, offTabCompleted].forEach(b => b.className = "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1.5");
+        offViewAvailable.classList.add("hidden");
+        offViewDuties.classList.add("hidden");
+        offViewCompleted.classList.add("hidden");
+
+        if (tab === "available") {
+          offTabAvailable.className = "px-4 py-2 rounded-xl bg-indigo-600 text-white shadow transition flex items-center space-x-1.5";
+          offViewAvailable.classList.remove("hidden");
+        } else if (tab === "duties") {
+          offTabDuties.className = "px-4 py-2 rounded-xl bg-indigo-600 text-white shadow transition flex items-center space-x-1.5";
+          offViewDuties.classList.remove("hidden");
+        } else if (tab === "completed") {
+          offTabCompleted.className = "px-4 py-2 rounded-xl bg-indigo-600 text-white shadow transition flex items-center space-x-1.5";
+          offViewCompleted.classList.remove("hidden");
+        }
+
+        renderOfficerLiveDispatchViews();
+      }
+
+      offTabAvailable.onclick = () => setOfficerSubTab("available");
+      offTabDuties.onclick = () => setOfficerSubTab("duties");
+      offTabCompleted.onclick = () => setOfficerSubTab("completed");
+
+      // Sign In vs Sign Up Master Toggle
+      const btnModeLogin = document.getElementById("btn-auth-mode-login");
+      const btnModeSignup = document.getElementById("btn-auth-mode-signup");
+      const loginContainer = document.getElementById("auth-login-forms-container");
+      const signupContainer = document.getElementById("auth-signup-forms-container");
+      const roleTabsContainer = document.getElementById("auth-role-tabs-container");
+
+      btnModeLogin.onclick = () => {
+        btnModeLogin.className = "flex-1 py-2 rounded-xl bg-emerald-600 text-white shadow transition";
+        btnModeSignup.className = "flex-1 py-2 rounded-xl text-slate-400 hover:text-white transition";
+        loginContainer.classList.remove("hidden");
+        roleTabsContainer.classList.remove("hidden");
+        signupContainer.classList.add("hidden");
+      };
+
+      btnModeSignup.onclick = () => {
+        btnModeSignup.className = "flex-1 py-2 rounded-xl bg-emerald-600 text-white shadow transition";
+        btnModeLogin.className = "flex-1 py-2 rounded-xl text-slate-400 hover:text-white transition";
+        signupContainer.classList.remove("hidden");
+        loginContainer.classList.add("hidden");
+        roleTabsContainer.classList.add("hidden");
+      };
+
+      // Sign In Role Tabs
+      const tabCit = document.getElementById("auth-tab-citizen");
+      const tabOff = document.getElementById("auth-tab-officer");
+      const tabAdm = document.getElementById("auth-tab-admin");
+
+      const fCit = document.getElementById("form-login-citizen");
+      const fOff = document.getElementById("form-login-officer");
+      const fAdm = document.getElementById("form-login-admin");
+
+      function setLoginTab(tab) {
+        [tabCit, tabOff, tabAdm].forEach(b => b.className = "py-1.5 rounded-xl text-slate-400 hover:text-white transition");
+        fCit.classList.add("hidden");
+        fOff.classList.add("hidden");
+        fAdm.classList.add("hidden");
+
+        if (tab === "citizen") {
+          tabCit.className = "py-1.5 rounded-xl bg-emerald-600 text-white shadow transition";
+          fCit.classList.remove("hidden");
+        } else if (tab === "officer") {
+          tabOff.className = "py-1.5 rounded-xl bg-indigo-600 text-white shadow transition";
+          fOff.classList.remove("hidden");
+        } else if (tab === "admin") {
+          tabAdm.className = "py-1.5 rounded-xl bg-amber-500 text-slate-950 font-black shadow transition";
+          fAdm.classList.remove("hidden");
+        }
+      }
+
+      tabCit.onclick = () => setLoginTab("citizen");
+      tabOff.onclick = () => setLoginTab("officer");
+      tabAdm.onclick = () => setLoginTab("admin");
+
+      // Sign Up Role Tabs
+      const suTabCit = document.getElementById("signup-tab-citizen");
+      const suTabOff = document.getElementById("signup-tab-officer");
+      const suFormCit = document.getElementById("form-signup-citizen");
+      const suFormOff = document.getElementById("form-signup-officer");
+
+      suTabCit.onclick = () => {
+        suTabCit.className = "py-1.5 rounded-lg bg-emerald-600 text-white transition";
+        suTabOff.className = "py-1.5 rounded-lg text-slate-400 hover:text-white transition";
+        suFormCit.classList.remove("hidden");
+        suFormOff.classList.add("hidden");
+      };
+
+      suTabOff.onclick = () => {
+        suTabOff.className = "py-1.5 rounded-lg bg-indigo-600 text-white transition";
+        suTabCit.className = "py-1.5 rounded-lg text-slate-400 hover:text-white transition";
+        suFormOff.classList.remove("hidden");
+        suFormCit.classList.add("hidden");
+      };
+
+      // 1. Submit Citizen Login
+      fCit.onsubmit = (e) => {
+        e.preventDefault();
+        const username = document.getElementById("citizen-login-username").value.trim();
+        const passkey = document.getElementById("citizen-login-passkey").value;
+        const errBox = document.getElementById("citizen-login-error");
+        const errMsg = document.getElementById("citizen-login-error-msg");
+
+        const foundUser = citizens.find(c => c.username.toLowerCase() === username.toLowerCase());
+
+        if (!foundUser) {
+          errMsg.innerHTML = `Username <strong>@${username}</strong> not found. Please click <em>'Sign Up (KYC Verification)'</em> to register.`;
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        if (foundUser.passkey !== passkey) {
+          errMsg.innerHTML = `Incorrect passkey for <strong>@${username}</strong>.`;
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        if (foundUser.status === "banned") {
+          errMsg.innerHTML = `Your citizen account (<strong>@${username}</strong>) has been <strong>PERMANENTLY SUSPENDED</strong> by Municipal Admin for filing fraudulent/fake reports.`;
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        errBox.classList.add("hidden");
+        currentUser = {
+          role: "citizen",
+          username: foundUser.username,
+          name: foundUser.name,
+          officerId: null,
+          phone: foundUser.phone
+        };
+
+        document.getElementById("auth-screen").classList.add("hidden");
+        document.getElementById("main-app-container").classList.remove("hidden");
+
+        setAppView("citizen");
+        showToast(`Welcome back, ${foundUser.name}! 🌿`, "Logged into Citizen Waste Tracking Portal (KYC Verified).", "success");
+      };
+
+      // 2. Submit Officer Login
+      fOff.onsubmit = (e) => {
+        e.preventDefault();
+        const officerInput = document.getElementById("officer-login-id").value.trim().toUpperCase();
+        const passkey = document.getElementById("officer-login-pin").value;
+        const errBox = document.getElementById("officer-login-error");
+        const errMsg = document.getElementById("officer-login-error-msg");
+
+        const foundOfficer = officers.find(o => o.id === officerInput || (o.username && o.username.toUpperCase() === officerInput));
+
+        if (!foundOfficer) {
+          errMsg.innerHTML = `Officer ID or Username <strong>${officerInput}</strong> is not registered. Please click <em>'Sign Up'</em> to register.`;
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        if (foundOfficer.passkey !== passkey && foundOfficer.pin !== passkey) {
+          errMsg.innerHTML = `Incorrect officer passkey.`;
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        if (foundOfficer.status === "banned") {
+          errMsg.innerHTML = `Officer ID <strong>${foundOfficer.id} (${foundOfficer.name})</strong> is <strong>SUSPENDED FROM DUTY</strong> by Municipal Admin.`;
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        if (foundOfficer.status !== "approved") {
+          errMsg.innerHTML = `Officer ID <strong>${foundOfficer.id} (${foundOfficer.name})</strong> is <strong>PENDING ADMIN APPROVAL</strong>.<br/><br/>You cannot log in until the Municipal Administrator logs in as <strong>Admin</strong> and clicks <em>'Accept &amp; Authorize Login'</em> in the Admin Command Center.`;
+          errBox.classList.remove("hidden");
+          return;
+        }
+
+        errBox.classList.add("hidden");
+        currentUser = {
+          role: "officer",
+          username: foundOfficer.username || foundOfficer.id,
+          name: foundOfficer.name,
+          officerId: foundOfficer.id,
+          phone: foundOfficer.phone,
+          badge: foundOfficer.badge || "AP-VMC-SWM-104"
+        };
+
+        document.getElementById("auth-screen").classList.add("hidden");
+        document.getElementById("main-app-container").classList.remove("hidden");
+
+        setAppView("officer");
+        showToast(`Welcome, ${foundOfficer.name}! 🛡️`, `Live Dispatch Duty Portal loaded for ${foundOfficer.id}.`, "success");
+      };
+
+      // 3. Submit Admin Login (GITAM security passkey)
+      fAdm.onsubmit = (e) => {
+        e.preventDefault();
+        const passkey = document.getElementById("admin-login-passkey").value.trim().toUpperCase();
+        const errEl = document.getElementById("admin-login-error");
+
+        if (passkey === "GITAM") {
+          errEl.classList.add("hidden");
+          currentUser = {
+            role: "admin",
+            username: "admin_vmc",
+            name: "Municipal Admin (VMC)",
+            officerId: null,
+            phone: ""
+          };
+
+          document.getElementById("auth-screen").classList.add("hidden");
+          document.getElementById("main-app-container").classList.remove("hidden");
+
+          setAppView("admin");
+          showToast("Admin Authenticated 👑", "Welcome to Municipal Sanitation Command Center.", "success");
+        } else {
+          errEl.classList.remove("hidden");
+        }
+      };
+
+      // 4. Submit Citizen KYC Sign Up
+      suFormCit.onsubmit = (e) => {
+        e.preventDefault();
+        const name = document.getElementById("su-citizen-name").value.trim();
+        const idType = document.getElementById("su-citizen-idtype").value;
+        const idNo = document.getElementById("su-citizen-idno").value.trim();
+        const phone = document.getElementById("su-citizen-phone").value.trim();
+        const username = document.getElementById("su-citizen-username").value.trim();
+        const passkey = document.getElementById("su-citizen-passkey").value;
+
+        if (citizens.some(c => c.username.toLowerCase() === username.toLowerCase())) {
+          alert(`Username @${username} is already taken. Please choose another.`);
+          return;
+        }
+
+        const newCitizen = {
+          username,
+          passkey,
+          name,
+          phone,
+          idType,
+          idNo,
+          kycStatus: "verified",
+          status: "active"
+        };
+
+        citizens.unshift(newCitizen);
+        localStorage.setItem("greenpulse_citizens_clean_v8", JSON.stringify(citizens));
+        syncServerData(true);
+
+        if (window.confetti) {
+          window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+        }
+
+        // Auto-login newly registered citizen
+        currentUser = {
+          role: "citizen",
+          username: newCitizen.username,
+          name: newCitizen.name,
+          officerId: null,
+          phone: newCitizen.phone
+        };
+
+        document.getElementById("auth-screen").classList.add("hidden");
+        document.getElementById("main-app-container").classList.remove("hidden");
+        setAppView("citizen");
+        renderUI();
+        showToast(`KYC Verified! Welcome, ${name} 🌿`, `Citizen account @${username} created and verified.`, "success");
+      };
+
+      // 5. Submit Officer KYC Sign Up
+      suFormOff.onsubmit = (e) => {
+        e.preventDefault();
+        const name = document.getElementById("su-officer-name").value.trim();
+        const id = document.getElementById("su-officer-id").value.trim().toUpperCase();
+        const badge = document.getElementById("su-officer-badge").value.trim().toUpperCase();
+        const ward = document.getElementById("su-officer-ward").value.trim();
+        const phone = document.getElementById("su-officer-phone").value.trim();
+        const username = document.getElementById("su-officer-username").value.trim();
+        const passkey = document.getElementById("su-officer-passkey").value;
+
+        if (officers.some(o => o.id === id || (o.username && o.username.toLowerCase() === username.toLowerCase()))) {
+          alert(`Officer ID ${id} or Username @${username} is already registered.`);
+          return;
+        }
+
+        const newOfficer = {
+          username,
+          passkey,
+          id,
+          name,
+          ward,
+          badge,
+          phone,
+          pin: passkey,
+          kycStatus: "verified",
+          status: "approved"
+        };
+
+        officers.unshift(newOfficer);
+        localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+        syncServerData(true);
+
+        if (window.confetti) {
+          window.confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+        }
+
+        // Auto-login newly registered officer
+        currentUser = {
+          role: "officer",
+          username: newOfficer.username || newOfficer.id,
+          name: newOfficer.name,
+          officerId: newOfficer.id,
+          phone: newOfficer.phone,
+          badge: newOfficer.badge
+        };
+
+        document.getElementById("auth-screen").classList.add("hidden");
+        document.getElementById("main-app-container").classList.remove("hidden");
+        setAppView("officer");
+        renderUI();
+        showToast(`Authorized! Welcome, ${name} 🛡️`, `Officer Live Dispatch Portal loaded for ${id}.`, "success");
+      };
+
+      // Officer Proof Modal Handlers
+      document.getElementById("btn-close-proof-modal").onclick = () => {
+        document.getElementById("officer-proof-modal").classList.add("hidden");
+      };
+      document.getElementById("btn-cancel-proof").onclick = () => {
+        document.getElementById("officer-proof-modal").classList.add("hidden");
+      };
+
+      // Submit Officer Proof Form (Instant Zero-Lag Execution)
+      window.submitOfficerProof = function(e) {
+        if (e) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+        }
+        
+        let r = null;
+        if (activeSpotForProof) {
+          r = reports.find(x => x.id === activeSpotForProof);
+        }
+        if (!r) {
+          r = reports.find(x => x.status === 'accepted' || x.status === 'pending');
+        }
+        if (!r) {
+          showToast("Select a Waste Spot", "Please select an accepted duty from your active list.", "info");
+          return false;
+        }
+
+        // STRICT PHOTO VALIDATION: Do NOT accept proof without actual photo
+        if (!currentOfficerProofPhoto) {
+          const errEl = document.getElementById("proof-photo-required-err");
+          if (errEl) errEl.classList.remove("hidden");
+          const proofBox = document.getElementById("proof-photo-box");
+          if (proofBox) proofBox.className = "border-2 border-dashed border-rose-500 bg-rose-50/40 rounded-xl p-4 text-center cursor-pointer transition relative overflow-hidden";
+          showToast("Photo Evidence Required 📷", "Please tap to take/upload a photo of the cleaned site or choose a preset before submitting.", "error");
+          return false;
+        }
+
+        r.status = "proof_submitted";
+        r.officerId = currentUser.officerId || (document.getElementById("proof-officer-id") && document.getElementById("proof-officer-id").value.trim()) || "VMC-OFF-104";
+        r.officerName = currentUser.name || (document.getElementById("proof-officer-name") && document.getElementById("proof-officer-name").value.trim()) || "Sanitation Field Officer";
+        r.officerPhone = currentUser.phone || "+91 98480 44554";
+        r.officerBadge = currentUser.badge || "AP-VMC-SWM-104";
+        r.officerNote = (document.getElementById("proof-action-note") && document.getElementById("proof-action-note").value.trim()) || "Ground clearance executed with compactor vehicle.";
+        r.officerPhoto = currentOfficerProofPhoto;
+
+        // Instant local persistence and UI update (0ms lag)
+        localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+        document.getElementById("officer-proof-modal").classList.add("hidden");
+        renderUI();
+        syncServerData(true);
+
+        // Switch to "My Active Duties" tab in officer portal
+        const btnDuties = document.getElementById("off-subtab-my-duties");
+        if (btnDuties) btnDuties.click();
+
+        if (window.confetti) {
+          window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 } });
+        }
+
+        showToast("Clearance Proof Uploaded! 🛡️", `Spot ${r.id} photographic proof submitted to Admin for verification and +50 credit disbursement.`, "success");
+
+        // Non-blocking background sync
+        if (globalDispatchChannel) {
+          try { globalDispatchChannel.postMessage({ type: 'PROOF_SUBMITTED', report: r }); } catch(e) {}
+        }
+        if (db && r.fbDocId) {
+          import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js").then(({ doc, updateDoc }) => {
+            updateDoc(doc(db, "reports", r.fbDocId), {
+              status: r.status,
+              officerId: r.officerId,
+              officerName: r.officerName,
+              officerPhone: r.officerPhone,
+              officerBadge: r.officerBadge,
+              officerNote: r.officerNote,
+              officerPhoto: r.officerPhoto
+            }).catch(console.warn);
+          }).catch(console.warn);
+        }
+
+        return false;
+      };
+
+      const proofForm = document.getElementById("officer-proof-form");
+      if (proofForm) proofForm.onsubmit = window.submitOfficerProof;
+
+      // Reset Clean Slate
+      document.getElementById("btn-reset").onclick = () => {
+        reports = [...INITIAL_REPORTS];
+        citizens = [...INITIAL_CITIZENS];
+        officers = [...INITIAL_OFFICERS];
+        localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+        localStorage.setItem("greenpulse_citizens_clean_v8", JSON.stringify(citizens));
+        localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+        renderUI();
+        showToast("Clean Slate Initialized! 🌿", "All incident queues and reports reset to clean production state.", "info");
+      };
+
+      // Export CSV
+      document.getElementById("btn-export-csv").onclick = exportCSV;
+
+      // Mobile Share Modal Triggers
+      const mobileShareModal = document.getElementById("mobile-share-modal");
+      if (mobileShareModal) {
+        document.getElementById("btn-open-mobile-share").onclick = () => mobileShareModal.classList.remove("hidden");
+        document.getElementById("btn-close-mobile-share").onclick = () => mobileShareModal.classList.add("hidden");
+        document.getElementById("btn-close-mobile-share-2").onclick = () => mobileShareModal.classList.add("hidden");
+      }
+
+      // Pitch Modal Triggers
+      const pitchModal = document.getElementById("pitch-modal");
+      document.getElementById("btn-open-pitch").onclick = () => pitchModal.classList.remove("hidden");
+      document.getElementById("btn-login-open-pitch").onclick = () => pitchModal.classList.remove("hidden");
+      document.getElementById("btn-close-pitch").onclick = () => pitchModal.classList.add("hidden");
+      document.getElementById("btn-close-pitch-2").onclick = () => pitchModal.classList.add("hidden");
+
+      // Firebase Modal
+      const fbModal = document.getElementById("firebase-modal");
+      document.getElementById("btn-open-firebase").onclick = () => fbModal.classList.remove("hidden");
+      document.getElementById("btn-close-firebase").onclick = () => fbModal.classList.add("hidden");
+
+      document.getElementById("btn-disconnect-fb").onclick = () => {
+        localStorage.removeItem("greenpulse_fb_config");
+        db = null;
+        if (unsubscribeFirestore) unsubscribeFirestore();
+        document.getElementById("firebase-dot").className = "w-2 h-2 rounded-full bg-amber-400";
+        fbModal.classList.add("hidden");
+        showToast("Switched to Local Offline", "Reports stored locally.", "info");
+      };
+
+      document.getElementById("firebase-form").onsubmit = (e) => {
+        e.preventDefault();
+        const apiKey = document.getElementById("fb-apikey").value.trim();
+        const projectId = document.getElementById("fb-projectid").value.trim();
+        if (apiKey && projectId) {
+          initFirebase({ apiKey, projectId, authDomain: `${projectId}.firebaseapp.com` });
+          fbModal.classList.add("hidden");
+        }
+      };
+
+      // Citizen Report Form Submit (Instant Zero-Lag Execution with Smooth Feedback)
+      window.submitCitizenReport = function(e) {
+        if (e) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+        }
+
+        // Smooth button press animation and visual feedback
+        const btn = document.getElementById("btn-broadcast-report");
+        if (btn) {
+          btn.style.transform = "scale(0.96)";
+          setTimeout(() => { btn.style.transform = "scale(1)"; }, 150);
+        }
+
+        const wasteTypeSel = document.getElementById("waste-type-select");
+        const wasteType = (wasteTypeSel && wasteTypeSel.value) || "dry";
+        
+        // Auto ensure photo evidence is ready
+        if (!currentPhoto) {
+          currentPhoto = PRESETS[wasteType] || PRESETS.dry;
+        }
+
+        const reporterInput = document.getElementById("input-reporter");
+        const reporter = (reporterInput && reporterInput.value.trim()) || currentUser.name || "Citizen Volunteer";
+        const reporterUsername = currentUser.username || "citizen";
+        const descInput = document.getElementById("desc-input");
+        const desc = (descInput && descInput.value.trim()) || `${wasteType.toUpperCase()} waste dumping spot near ward`;
+
+        let lat = currentCoords && currentCoords.lat ? currentCoords.lat : 16.5062;
+        let lng = currentCoords && currentCoords.lng ? currentCoords.lng : 80.6480;
+        // Jitter slightly for each report so pins don't overlap completely
+        lat = Number((lat + (Math.random() - 0.5) * 0.003).toFixed(5));
+        lng = Number((lng + (Math.random() - 0.5) * 0.003).toFixed(5));
+
+        const newReport = {
+          id: `VMC-${Math.floor(100 + Math.random() * 900)}`,
+          wasteType,
+          status: "pending", // Open in Live Dispatch pool for officers
+          reporter,
+          reporterUsername,
+          desc,
+          lat,
+          lng,
+          photo: currentPhoto,
+          points: 10,
+          timestamp: new Date().toISOString()
+        };
+
+        // 1. INSTANT LOCAL UPDATE (Zero wait, 0ms lag)
+        reports.unshift(newReport);
+        localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+        renderUI();
+        syncServerData(true);
+
+        // 2. Maintain photo preview with preset for continuous reporting
+        currentPhoto = PRESETS[wasteType] || PRESETS.dry;
+        const photoPreview = document.getElementById("photo-preview");
+        if (photoPreview) {
+          photoPreview.src = currentPhoto;
+          photoPreview.classList.remove("hidden");
+        }
+
+        // 3. Center map on newly placed pin & close all popups so popup disappears cleanly
+        if (map) {
+          map.closePopup();
+          map.setView([newReport.lat, newReport.lng], 15);
+        }
+
+        if (window.confetti) {
+          window.confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        }
+
+        if (descInput) descInput.value = "";
+        showToast("Pickup Request Placed & Broadcasted! ⚡", `Spot #${newReport.id} (${wasteType.toUpperCase()}) is now LIVE on the map and dispatched to field officers!`, "success");
+
+        // 4. Non-blocking background sync
+        if (globalDispatchChannel) {
+          try { globalDispatchChannel.postMessage({ type: 'NEW_REPORT', report: newReport }); } catch(e) {}
+        }
+
+        if (db) {
+          import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js").then(({ collection, addDoc }) => {
+            addDoc(collection(db, "reports"), newReport).then(docRef => {
+              newReport.fbDocId = docRef.id;
+            }).catch(console.warn);
+          }).catch(console.warn);
+        }
+
+        return false;
+      };
+
+      const repForm = document.getElementById("report-form");
+      if (repForm) repForm.onsubmit = window.submitCitizenReport;
+
+      // Listen for Cross-Tab & Cross-Device Broadcasts
+      if (globalDispatchChannel) {
+        globalDispatchChannel.onmessage = (event) => {
+          if (event.data && (event.data.type === 'NEW_REPORT' || event.data.type === 'DUTY_ACCEPTED' || event.data.type === 'PROOF_SUBMITTED' || event.data.type === 'RESOLVED')) {
+            reports = JSON.parse(localStorage.getItem("greenpulse_reports_clean_v8")) || reports;
+            renderUI();
+            
+            if (event.data.type === 'NEW_REPORT' && currentUser.role === 'officer') {
+              showToast("⚡ Incoming Pickup Request!", `Spot ${event.data.report.id} (${event.data.report.wasteType.toUpperCase()}) broadcasted nearby!`, "info");
+            } else if (event.data.type === 'DUTY_ACCEPTED') {
+              if (currentUser.role === 'officer') {
+                showToast("🛵 Spot Locked by Peer", `Spot ${event.data.reportId} accepted by Officer ${event.data.officerName || ''}.`, "info");
+              } else if (currentUser.role === 'citizen') {
+                showToast("🛵 Officer En Route!", `Your spot ${event.data.reportId} was accepted by ${event.data.officerName || 'an Officer'}!`, "success");
+              }
+            } else if (event.data.type === 'PROOF_SUBMITTED' && currentUser.role === 'admin') {
+              showToast("🔔 Clearance Proof in Review Queue!", `Spot ${event.data.report.id} clearance photo uploaded for Admin verification.`, "info");
+            } else if (event.data.type === 'RESOLVED') {
+              if (currentUser.role === 'citizen' || currentUser.role === 'officer') {
+                showToast("🎉 Spot Resolved & Credits Disbursed!", `Spot ${event.data.report.id} verified by Municipal Admin!`, "success");
+              }
+            }
+          }
+        };
+      }
+
+      // Listen for Storage changes
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'greenpulse_reports_clean_v8') {
+          reports = JSON.parse(e.newValue) || reports;
+          renderUI();
+        }
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+  </script>
+</body>
+</html>
