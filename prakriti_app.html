@@ -2409,12 +2409,79 @@
     }
 
     // =========================================================================
-    // SUPABASE CLOUD & REALTIME BROADCAST ENGINE (VERCEL & GITHUB LIVE)
+    // SUPABASE CLOUD POSTGRESQL & REALTIME ENGINE (VERCEL & GITHUB LIVE)
     // =========================================================================
     const SUPABASE_URL = "https://ymybzocpfyvlospjwbwr.supabase.co";
     const SUPABASE_KEY = "sb_publishable__HpZ-ejoALrwMsNUbv6yyg_owVbYmsT";
     let supabaseClient = null;
     let supabaseRealtimeChannel = null;
+
+    async function loadFromSupabase() {
+      if (!supabaseClient) return;
+      try {
+        const { data: dbReports } = await supabaseClient.from('reports').select('*');
+        if (dbReports && dbReports.length > 0) {
+          reports = dbReports.map(r => ({
+            id: r.id,
+            wasteType: r.waste_type || r.wasteType,
+            status: r.status,
+            reporter: r.reporter,
+            reporterUsername: r.reporter_username || r.reporterUsername,
+            desc: r.desc_text || r.desc,
+            lat: Number(r.lat),
+            lng: Number(r.lng),
+            photo: r.photo,
+            points: r.points,
+            officerId: r.officer_id || r.officerId,
+            officerName: r.officer_name || r.officerName,
+            officerPhone: r.officer_phone || r.officerPhone,
+            officerBadge: r.officer_badge || r.officerBadge,
+            officerNote: r.officer_note || r.officerNote,
+            officerPhoto: r.officer_photo || r.officerPhoto,
+            officerCredits: r.officer_credits || r.officerCredits,
+            timestamp: r.created_at || r.timestamp
+          }));
+          localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+          renderUI();
+        }
+
+        const { data: dbCitizens } = await supabaseClient.from('citizens').select('*');
+        if (dbCitizens && dbCitizens.length > 0) {
+          citizens = dbCitizens.map(c => ({
+            username: c.username,
+            passkey: c.passkey,
+            name: c.name,
+            phone: c.phone,
+            idType: c.id_type || c.idType,
+            idNo: c.id_no || c.idNo,
+            kycStatus: c.kyc_status || c.kycStatus,
+            status: c.status
+          }));
+          localStorage.setItem("greenpulse_citizens_clean_v8", JSON.stringify(citizens));
+          renderUI();
+        }
+
+        const { data: dbOfficers } = await supabaseClient.from('officers').select('*');
+        if (dbOfficers && dbOfficers.length > 0) {
+          officers = dbOfficers.map(o => ({
+            id: o.id,
+            username: o.username,
+            passkey: o.passkey,
+            pin: o.pin || o.passkey,
+            name: o.name,
+            ward: o.ward,
+            badge: o.badge,
+            phone: o.phone,
+            kycStatus: o.kyc_status || o.kycStatus,
+            status: o.status
+          }));
+          localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+          renderUI();
+        }
+      } catch (err) {
+        console.warn("Supabase table load notice:", err);
+      }
+    }
 
     function initSupabaseRealtime() {
       const supaLib = window.supabase || (typeof supabase !== 'undefined' ? supabase : null);
@@ -2424,11 +2491,21 @@
             realtime: { params: { eventsPerSecond: 10 } }
           });
 
+          // 1. Initial Load from Supabase Database
+          loadFromSupabase();
+
+          // 2. Realtime Postgres Changes Subscription
+          supabaseClient.channel('public-db-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => loadFromSupabase())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'citizens' }, () => loadFromSupabase())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'officers' }, () => loadFromSupabase())
+            .subscribe();
+
+          // 3. Realtime Broadcast Channel across all Vercel & GitHub visitors
           supabaseRealtimeChannel = supabaseClient.channel('prakriti-live-room', {
             config: { broadcast: { self: false } }
           });
 
-          // 1. Listen for State Sync from any device on Vercel / GitHub Pages / Mobile
           supabaseRealtimeChannel.on('broadcast', { event: 'STATE_SYNC' }, ({ payload }) => {
             if (payload) {
               let changed = false;
@@ -2505,7 +2582,62 @@
           } catch(e) {}
         }
 
-        // 2. Sync to local/tunnel REST API if available (fails silently on static Vercel/GitHub)
+        // 2. Persist to Supabase Database Tables if configured
+        if (pushData && supabaseClient) {
+          try {
+            reports.forEach(r => {
+              supabaseClient.from('reports').upsert({
+                id: r.id,
+                waste_type: r.wasteType,
+                status: r.status,
+                reporter: r.reporter,
+                reporter_username: r.reporterUsername,
+                desc_text: r.desc,
+                lat: r.lat,
+                lng: r.lng,
+                photo: r.photo,
+                points: r.points,
+                officer_id: r.officerId,
+                officer_name: r.officerName,
+                officer_phone: r.officerPhone,
+                officer_badge: r.officerBadge,
+                officer_note: r.officerNote,
+                officer_photo: r.officerPhoto,
+                officer_credits: r.officerCredits
+              }).catch(() => {});
+            });
+
+            citizens.forEach(c => {
+              supabaseClient.from('citizens').upsert({
+                username: c.username,
+                passkey: c.passkey,
+                name: c.name,
+                phone: c.phone,
+                id_type: c.idType,
+                id_no: c.idNo,
+                kyc_status: c.kycStatus,
+                status: c.status
+              }).catch(() => {});
+            });
+
+            officers.forEach(o => {
+              supabaseClient.from('officers').upsert({
+                id: o.id,
+                username: o.username,
+                passkey: o.passkey,
+                pin: o.pin,
+                name: o.name,
+                ward: o.ward,
+                badge: o.badge,
+                phone: o.phone,
+                kyc_status: o.kycStatus,
+                status: o.status
+              }).catch(() => {});
+            });
+          } catch(e) {}
+        }
+
+        // 3. Sync to local/tunnel REST API if available (fails silently on static Vercel/GitHub)
         if (pushData) {
           await fetch('/api/sync', {
             method: 'POST',
