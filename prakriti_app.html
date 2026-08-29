@@ -15,6 +15,9 @@
   <!-- Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 
+  <!-- GunDB Zero-Config Realtime Cloud Database -->
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+
   <!-- Supabase JS Client (Cloud PostgreSQL & Realtime Broadcast) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -2409,6 +2412,65 @@
     }
 
     // =========================================================================
+    // GUNDB ZERO-CONFIG REALTIME CLOUD DATABASE (VERCEL & GITHUB LIVE 24/7)
+    // =========================================================================
+    let gunDB = null;
+    let gunPrakriti = null;
+
+    function initGunCloudDB() {
+      if (typeof Gun !== 'undefined') {
+        try {
+          gunDB = Gun({
+            peers: [
+              'https://gun-manhattan.herokuapp.com/gun',
+              'https://relay.peer.ooo/gun',
+              'https://peer.wallie.io/gun'
+            ]
+          });
+          gunPrakriti = gunDB.get('prakriti_vmc_master_v11');
+
+          // Listen for 24/7 live updates from any phone/browser on GitHub Pages & Vercel
+          gunPrakriti.get('state_json').on((raw) => {
+            if (raw) {
+              try {
+                const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                let changed = false;
+                if (data.reports && Array.isArray(data.reports)) {
+                  if (JSON.stringify(data.reports) !== JSON.stringify(reports)) {
+                    reports = data.reports;
+                    localStorage.setItem("greenpulse_reports_clean_v8", JSON.stringify(reports));
+                    changed = true;
+                  }
+                }
+                if (data.citizens && Array.isArray(data.citizens)) {
+                  if (JSON.stringify(data.citizens) !== JSON.stringify(citizens)) {
+                    citizens = data.citizens;
+                    localStorage.setItem("greenpulse_citizens_clean_v8", JSON.stringify(citizens));
+                    changed = true;
+                  }
+                }
+                if (data.officers && Array.isArray(data.officers)) {
+                  if (JSON.stringify(data.officers) !== JSON.stringify(officers)) {
+                    officers = data.officers;
+                    localStorage.setItem("greenpulse_officers_clean_v8", JSON.stringify(officers));
+                    changed = true;
+                  }
+                }
+                if (changed) {
+                  renderUI();
+                }
+              } catch(err) {}
+            }
+          });
+        } catch(e) {
+          console.warn("GunDB notice:", e);
+        }
+      }
+    }
+
+    initGunCloudDB();
+
+    // =========================================================================
     // SUPABASE CLOUD POSTGRESQL & REALTIME ENGINE (VERCEL & GITHUB LIVE)
     // =========================================================================
     const SUPABASE_URL = "https://ymybzocpfyvlospjwbwr.supabase.co";
@@ -2571,7 +2633,19 @@
     // =========================================================================
     async function syncServerData(pushData = false) {
       try {
-        // 1. Broadcast to Supabase Realtime across all Vercel, GitHub & mobile users
+        // 1. Broadcast to GunDB 24/7 Cloud Relay across all devices in the world
+        if (pushData && gunPrakriti) {
+          try {
+            gunPrakriti.get('state_json').put(JSON.stringify({
+              reports,
+              citizens,
+              officers,
+              updatedAt: new Date().toISOString()
+            }));
+          } catch(e) {}
+        }
+
+        // 2. Broadcast to Supabase Realtime across all Vercel, GitHub & mobile users
         if (pushData && supabaseRealtimeChannel) {
           try {
             supabaseRealtimeChannel.send({
